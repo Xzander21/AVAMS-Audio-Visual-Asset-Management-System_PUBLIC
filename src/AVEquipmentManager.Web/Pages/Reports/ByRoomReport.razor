@@ -1,0 +1,68 @@
+@page "/reports/by-room"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Equipment by Room Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Equipment by Room Report"
+              Subtitle="Inventory grouped by room with totals and status breakdowns.">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mb-3">
+            <strong>@_rooms.Count</strong> rooms, <strong>@_all.Count</strong> total equipment items.
+        </MudText>
+
+        @foreach (var group in _rooms.OrderBy(r => r))
+        {
+            var items = _all.Where(e => e.RoomName == group).ToList();
+            <div style="margin-bottom: 24px; page-break-inside: avoid;">
+                <div style="background:#2E7D32; color:white; padding:8px 12px; font-weight:600; font-size:0.95rem;">
+                    @group  ·  @items.Count item(s)
+                </div>
+                <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                    <thead>
+                        <tr style="background:#F1F8E9;">
+                            <th style="border:1px solid #ccc; padding:6px; text-align:left;">Name</th>
+                            <th style="border:1px solid #ccc; padding:6px; text-align:left;">Serial</th>
+                            <th style="border:1px solid #ccc; padding:6px; text-align:left;">Installed</th>
+                            <th style="border:1px solid #ccc; padding:6px; text-align:left;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in items.OrderBy(x => x.Name))
+                        {
+                            <tr>
+                                <td style="border:1px solid #ccc; padding:6px;">@e.Name</td>
+                                <td style="border:1px solid #ccc; padding:6px;">@e.SerialNumber</td>
+                                <td style="border:1px solid #ccc; padding:6px;">@e.DateInstalled.ToString("yyyy-MM-dd")</td>
+                                <td style="border:1px solid #ccc; padding:6px;">@e.Status</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</ReportHeader>
+
+@code {
+    private List<EquipmentDto> _all = new();
+    private List<string> _rooms = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _all = await EquipmentSvc.GetAllAsync();
+            _rooms = _all.Select(e => e.RoomName).Distinct().ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

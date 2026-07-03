@@ -1,0 +1,78 @@
+html, body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+/* AVAMS brand colors: green primary, yellow accent */
+:root {
+    --avams-green: #2E7D32;
+    --avams-green-dark: #1B5E20;
+    --avams-yellow: #FBC02D;
+}
+
+.loading-progress {
+    position: relative;
+    display: block;
+    fill: none;
+    stroke: #FBC02D;
+    stroke-width: 0.6rem;
+    transform-origin: 50% 50%;
+    transform: rotate(-90deg);
+}
+
+    .loading-progress circle {
+        fill: none;
+        transition: stroke-dasharray 0.05s ease-in-out;
+    }
+
+        .loading-progress circle:last-child {
+            stroke: #2E7D32;
+            stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+            transition: stroke-dasharray 0.05s ease-in-out;
+        }
+
+.loading-progress-text {
+    position: absolute;
+    text-align: center;
+    font-weight: bold;
+    inset: calc(20vh + 1.25rem) 0 auto 0.2rem;
+    color: #1B5E20;
+}
+
+    .loading-progress-text:after {
+        content: var(--blazor-load-percentage-text, "Loading");
+    }
+
+#blazor-error-ui {
+    background: #FFF9C4;
+    border-top: 3px solid #2E7D32;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }
+
+/* ── Mobile-friendly tweaks ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .mud-table-cell { padding: 4px 8px; }
+    .mud-paper.pa-4 { padding: 12px !important; }
+    .mud-typography-h4 { font-size: 1.3rem !important; }
+    .mud-typography-h5 { font-size: 1.1rem !important; }
+    .mud-typography-h6 { font-size: 1rem !important; }
+}
+
+/* Make MudChip wrap on small screens */
+.mud-chip { white-space: normal; }

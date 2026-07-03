@@ -1,0 +1,77 @@
+@page "/reports/disposals"
+@attribute [Authorize(Roles = "Admin,Supervisor,AVStaff,Staff")]
+@inject DisposalService DisposalSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Disposal Log Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Disposal Log Report"
+              Subtitle="@($"Total disposal transactions: {_items.Count}")">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#0288D1;">@_items.Count(d => d.Status == DisposalStatus.Pending)</MudText>
+                <MudText Typo="Typo.caption">Pending</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#F9A825;">@_items.Count(d => d.Status == DisposalStatus.Approved)</MudText>
+                <MudText Typo="Typo.caption">Approved</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#2E7D32;">@_items.Count(d => d.Status == DisposalStatus.Disposed)</MudText>
+                <MudText Typo="Typo.caption">Disposed</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5">@_items.Count(d => d.Status == DisposalStatus.Cancelled)</MudText>
+                <MudText Typo="Typo.caption">Cancelled</MudText>
+            </MudPaper></MudItem>
+        </MudGrid>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead>
+                <tr style="background:#E8F5E9; color:#1B5E20;">
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">#</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Equipment</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Room</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Reason</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Method</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Status</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Requested By</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Disposed</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in _items.OrderByDescending(x => x.CreatedAt))
+                {
+                    <tr>
+                        <td style="border:1px solid #ccc; padding:6px;">#@d.Id</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@d.EquipmentName <small>(@d.EquipmentSerial)</small></td>
+                        <td style="border:1px solid #ccc; padding:6px;">@d.EquipmentRoom</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@d.Reason</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@d.Method</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@d.Status</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@(d.RequestedBy ?? "—")</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@(d.DisposedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</ReportHeader>
+
+@code {
+    private List<DisposalDto> _items = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _items = await DisposalSvc.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

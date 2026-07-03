@@ -1,0 +1,133 @@
+<MudNavMenu>
+
+    @* =========================================================
+       IT Specialist view — minimal: submit + view own tickets.
+       External per-school IT users never see inventory or
+       transactions. Their only entry point is ticket submission.
+       ========================================================= *@
+    <AuthorizeView Roles="ITSpecialist,Student">
+        <Authorized>
+            <MudNavLink Href="/submit-ticket" Match="NavLinkMatch.All"
+                        Icon="@Icons.Material.Filled.Send">
+                Submit Ticket
+            </MudNavLink>
+            <MudNavLink Href="/tickets" Icon="@Icons.Material.Filled.Inbox">
+                My Tickets
+            </MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+
+    @* =========================================================
+       Supervisor view — APPROVALS-ONLY menu (separation of duties).
+       Supervisor sees only the records that require their approval
+       authority: Acquisitions (the "Adding of Equipment" gate via
+       Deploy) and Disposals (the Pending → Approved → Disposed gate).
+       Dashboard is included so they have situational awareness.
+       ========================================================= *@
+    <AuthorizeView Roles="Supervisor">
+        <Authorized>
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                Dashboard
+            </MudNavLink>
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-4 py-1">
+                Approvals
+            </MudText>
+            <MudNavLink Href="/acquisitions" Icon="@Icons.Material.Filled.ShoppingCart">
+                Acquisitions
+            </MudNavLink>
+            <MudNavLink Href="/disposals" Icon="@Icons.Material.Filled.DeleteSweep">
+                Disposals
+            </MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+
+    @* =========================================================
+       Admin (AV Head) + AVStaff — full operational view.
+       Differences are enforced UI-side (AVStaff cannot see the
+       "Delete Forever" purge button in the Archive page) and
+       API-side (purge endpoints are Admin-only).
+       Legacy "Staff" role string included for backwards compatibility.
+       ========================================================= *@
+    <AuthorizeView Roles="Admin,AVStaff,Staff">
+        <Authorized>
+
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+                Dashboard
+            </MudNavLink>
+
+            <MudNavLink Href="/equipment" Icon="@Icons.Material.Filled.Devices">
+                Equipment
+            </MudNavLink>
+
+            <MudNavLink Href="/staff" Icon="@Icons.Material.Filled.Groups">
+                Staff
+            </MudNavLink>
+
+            <MudNavLink Href="/track" Icon="@Icons.Material.Filled.MyLocation">
+                Track Staff
+            </MudNavLink>
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-4 py-1">
+                Transactions
+            </MudText>
+
+            <MudNavLink Href="/acquisitions" Icon="@Icons.Material.Filled.ShoppingCart">
+                Acquisitions
+            </MudNavLink>
+
+            <MudNavLink Href="/tickets" Icon="@Icons.Material.Filled.Build">
+                Maintenance Records
+            </MudNavLink>
+
+            <MudNavLink Href="/disposals" Icon="@Icons.Material.Filled.DeleteSweep">
+                Disposals
+            </MudNavLink>
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-4 py-1">
+                Analytics
+            </MudText>
+
+            <MudNavLink Href="/kpis" Icon="@Icons.Material.Filled.Insights">
+                KPIs
+            </MudNavLink>
+
+            <MudNavLink Href="/reports" Icon="@Icons.Material.Filled.Assessment">
+                Reports
+            </MudNavLink>
+
+            <MudDivider Class="my-2" />
+
+            <MudNavLink Href="/chatbot" Icon="@Icons.Material.Filled.Chat">
+                Chatbot
+            </MudNavLink>
+
+            <MudNavLink Href="/archive" Icon="@Icons.Material.Filled.Archive">
+                Archive
+            </MudNavLink>
+
+        </Authorized>
+    </AuthorizeView>
+
+    @* =========================================================
+       Admin-only management section. AVStaff explicitly cannot
+       see User Management — only the AV Head (Admin) can create,
+       re-role, or delete user accounts. This is the on-boarding
+       surface for new hires (e.g. add AVStaff account when a new
+       operational AV employee starts).
+       ========================================================= *@
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-4 py-1">
+                Administration
+            </MudText>
+            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.ManageAccounts">
+                User Management
+            </MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+
+</MudNavMenu>

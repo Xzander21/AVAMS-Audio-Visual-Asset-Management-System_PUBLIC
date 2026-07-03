@@ -1,0 +1,88 @@
+@inject AcquisitionService AcquisitionSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" Color="Color.Success" />
+            Deploy Acquisition #@Acquisition?.Id
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            Deploying creates a new Equipment record for <strong>@Acquisition?.ItemName</strong> in the active inventory.
+            This action cannot be undone.
+        </MudAlert>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_serial" Label="Serial Number" Required="true"
+                                  RequiredError="Serial number is required" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_room" Label="Room (assigned)" Required="true"
+                                  RequiredError="Room is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_dateInstalled" Label="Installation Date" Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_lifeYears" Label="Expected Life (years)" Min="1" Max="50"
+                                     HelperText="Default 5 (institution AV retirement policy)." />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="@Submit" Disabled="@_saving"
+                   StartIcon="@Icons.Material.Filled.CheckCircle">
+            @if (_saving) { <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" /> }
+            Confirm Deploy
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public AcquisitionDto? Acquisition { get; set; }
+
+    private MudForm _form = null!;
+    private bool _isValid, _saving;
+    private string _serial = "";
+    private string _room = "";
+    private DateTime? _dateInstalled = DateTime.UtcNow;
+    private int _lifeYears = 5;
+
+    protected override void OnParametersSet()
+    {
+        if (Acquisition?.IntendedRoom != null) _room = Acquisition.IntendedRoom;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid || Acquisition == null) return;
+        _saving = true;
+        try
+        {
+            var dto = new DeployAcquisitionDto
+            {
+                SerialNumber        = _serial,
+                RoomName            = _room,
+                DateInstalled       = _dateInstalled ?? DateTime.UtcNow,
+                ExpectedLifeInYears = _lifeYears
+            };
+            var (data, err) = await AcquisitionSvc.DeployAsync(Acquisition.Id, dto);
+            if (data != null)
+            {
+                Snackbar.Add($"Deployed. Equipment record #{data.DeployedEquipmentId} created.", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else Snackbar.Add($"Error: {err}", Severity.Error);
+        }
+        finally { _saving = false; }
+    }
+}

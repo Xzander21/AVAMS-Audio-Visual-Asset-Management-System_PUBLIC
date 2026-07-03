@@ -1,0 +1,109 @@
+@page "/login"
+@inject AuthService AuthSvc
+@inject NavigationManager Nav
+
+<PageTitle>Login - AV Equipment Manager</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex flex-column align-center justify-center"
+              Style="min-height:80vh;">
+    <MudPaper Class="pa-8 pt-6" Elevation="4" Style="width:100%;max-width:420px;border-radius:12px;">
+
+        <!-- Logo / Header -->
+        <div class="d-flex flex-column align-center mb-6">
+            <MudIcon Icon="@Icons.Material.Filled.VideoSettings"
+                     Style="font-size:3rem;color:var(--mud-palette-primary);" Class="mb-2" />
+            <MudText Typo="Typo.h5" Align="Align.Center" Style="font-weight:700;">
+                AV Equipment Manager
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                Sign in to your account
+            </MudText>
+        </div>
+
+        <!-- Error alert -->
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@_errorMessage</MudAlert>
+        }
+
+        <!-- Login form -->
+        <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person"
+                      Class="mb-3" Disabled="@_loading"
+                      OnKeyDown="@OnKeyDown" />
+
+        <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                      OnAdornmentClick="@(() => _showPassword = !_showPassword)"
+                      InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                      Class="mb-5" Disabled="@_loading"
+                      OnKeyDown="@OnKeyDown" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
+                   Size="Size.Large" OnClick="@HandleLogin" Disabled="@_loading"
+                   Style="height:50px;font-size:1rem;letter-spacing:.05rem;">
+            @if (_loading)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Signing in…</span>
+            }
+            else
+            {
+                <span>Sign In</span>
+            }
+        </MudButton>
+
+        <!-- Default credentials hint (dev/demo) -->
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+            Default accounts: <strong>admin</strong> / Admin@1234 &nbsp;·&nbsp;
+            <strong>staff</strong> / Staff@1234
+        </MudText>
+
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private string _username = "";
+    private string _password = "";
+    private bool   _loading  = false;
+    private bool   _showPassword = false;
+    private string? _errorMessage;
+
+    private async Task HandleLogin()
+    {
+        _errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
+        {
+            _errorMessage = "Please enter your username and password.";
+            return;
+        }
+
+        _loading = true;
+        StateHasChanged();
+
+        var (success, error) = await AuthSvc.LoginAsync(_username, _password);
+
+        _loading = false;
+
+        if (success)
+        {
+            var redirect = string.IsNullOrEmpty(ReturnUrl) ? "/" : Uri.UnescapeDataString(ReturnUrl);
+            Nav.NavigateTo(redirect);
+        }
+        else
+        {
+            _errorMessage = error ?? "Login failed. Please try again.";
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await HandleLogin();
+    }
+}

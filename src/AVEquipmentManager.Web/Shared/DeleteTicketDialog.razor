@@ -1,0 +1,55 @@
+@using AVEquipmentManager.Shared.DTOs
+@inject TicketService TicketSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Class="mr-2" />
+            Delete Ticket
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>
+            Are you sure you want to permanently delete ticket
+            <strong>#@Ticket.Id — @Ticket.Title</strong>?
+            This action cannot be undone.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   OnClick="Confirm" Disabled="@_deleting">
+            @if (_deleting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Delete
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public TicketDto Ticket { get; set; } = null!;
+
+    private bool _deleting;
+
+    private async Task Confirm()
+    {
+        _deleting = true;
+        var (success, error) = await TicketSvc.DeleteAsync(Ticket.Id);
+        _deleting = false;
+
+        if (!success)
+        {
+            Snackbar.Add($"Could not delete ticket: {error}", Severity.Error);
+            return;
+        }
+
+        Snackbar.Add("Ticket deleted.", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

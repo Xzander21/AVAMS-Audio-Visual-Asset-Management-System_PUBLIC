@@ -1,0 +1,124 @@
+@page "/reports/lifecycle-events"
+@attribute [Authorize(Roles = "Admin,Supervisor,AVStaff,Staff")]
+@inject AcquisitionService AcquisitionSvc
+@inject DisposalService DisposalSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Lifecycle Events Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Lifecycle Events Report"
+              Subtitle="Chronological log of acquisitions and disposals — what entered and left the AV inventory in a given period. Use this report to brief management on portfolio additions and write-offs.">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <!-- Filter -->
+        <div class="no-print" style="margin-bottom:16px;">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="string" Label="Period" @bind-Value="_period">
+                        <MudSelectItem Value="@("30")">Last 30 days</MudSelectItem>
+                        <MudSelectItem Value="@("90")">Last 90 days</MudSelectItem>
+                        <MudSelectItem Value="@("180")">Last 180 days</MudSelectItem>
+                        <MudSelectItem Value="@("365")">Last 365 days</MudSelectItem>
+                        <MudSelectItem Value="@("all")">All time</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </div>
+
+        <MudGrid Class="mb-4">
+            <MudItem xs="6"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#2E7D32;">@FilteredEvents.Count(e => e.Kind == "Acquired")</MudText>
+                <MudText Typo="Typo.caption">Acquired (Deployed)</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="6"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#C62828;">@FilteredEvents.Count(e => e.Kind == "Disposed")</MudText>
+                <MudText Typo="Typo.caption">Disposed</MudText>
+            </MudPaper></MudItem>
+        </MudGrid>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead>
+                <tr style="background:#E8F5E9; color:#1B5E20;">
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Date</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Event</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Item</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Category</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Details</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in FilteredEvents.OrderByDescending(x => x.Date))
+                {
+                    var bg = e.Kind == "Acquired" ? "#F1F8E9" : "#FFEBEE";
+                    <tr style="background:@bg;">
+                        <td style="border:1px solid #ccc; padding:6px;">@e.Date.ToString("yyyy-MM-dd")</td>
+                        <td style="border:1px solid #ccc; padding:6px; font-weight:600; color:@(e.Kind == "Acquired" ? "#1B5E20" : "#B71C1C");">@e.Kind</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.Item</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.Category</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.Detail</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@(e.By ?? "—")</td>
+                    </tr>
+                }
+                @if (FilteredEvents.Count == 0)
+                {
+                    <tr><td colspan="6" style="border:1px solid #ccc; padding:12px; text-align:center; color:#777;">
+                        No lifecycle events in the selected period.
+                    </td></tr>
+                }
+            </tbody>
+        </table>
+    }
+</ReportHeader>
+
+@code {
+    private List<EventRow> _events = new();
+    private string _period = "90";
+    private bool _loading = true;
+
+    private record EventRow(DateTime Date, string Kind, string Item, string Category, string Detail, string? By);
+
+    private IReadOnlyList<EventRow> FilteredEvents
+    {
+        get
+        {
+            if (_period == "all") return _events;
+            if (!int.TryParse(_period, out var days)) return _events;
+            var cutoff = DateTime.UtcNow.AddDays(-days);
+            return _events.Where(e => e.Date >= cutoff).ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var acqs = await AcquisitionSvc.GetAllAsync();
+            var dsps = await DisposalSvc.GetAllAsync();
+            var list = new List<EventRow>();
+            foreach (var a in acqs.Where(x => x.DeployedAt.HasValue))
+            {
+                list.Add(new EventRow(
+                    a.DeployedAt!.Value, "Acquired", a.ItemName, a.Category.ToString(),
+                    $"PO {a.PurchaseOrderNumber ?? "—"} · Vendor {a.Vendor ?? "—"} · Qty {a.Quantity}",
+                    a.RequestedBy
+                ));
+            }
+            foreach (var d in dsps.Where(x => x.DisposedAt.HasValue))
+            {
+                list.Add(new EventRow(
+                    d.DisposedAt!.Value, "Disposed", d.EquipmentName, "—",
+                    $"Method: {d.Method} · Reason: {d.Reason}",
+                    d.RequestedBy
+                ));
+            }
+            _events = list;
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

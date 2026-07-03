@@ -1,0 +1,214 @@
+@page "/equipment"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject IDialogService DialogSvc
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Equipment - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Devices" Class="mr-2" /> Equipment
+</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <!-- Filters & Search -->
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_searchText" Label="Search by name or serial"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="string" Label="Room" @bind-Value="_filterRoom" Clearable="true">
+                    <MudSelectItem Value="@("")">All Rooms</MudSelectItem>
+                    @foreach (var room in _rooms)
+                    {
+                        <MudSelectItem T="string" Value="@room">@room</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="string" Label="Status" @bind-Value="_filterStatus" Clearable="true">
+                    <MudSelectItem Value="@("")">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                    <MudSelectItem Value="@("UnderMaintenance")">Under Maintenance</MudSelectItem>
+                    <MudSelectItem Value="@("Retired")">Retired</MudSelectItem>
+                    <MudSelectItem Value="@("Decommissioned")">Decommissioned</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="string" Label="Lifecycle" @bind-Value="_filterLifecycle" Clearable="true">
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                    <MudSelectItem Value="@("Expired")">Expired</MudSelectItem>
+                    <MudSelectItem Value="@("ExpiringSoon")">Expiring &lt; 6 months</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <AuthorizeView Roles="Admin" Context="addCtx">
+                <Authorized>
+                    <MudItem xs="12" md="2" Class="d-flex align-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="@OpenAddDialog" FullWidth="true" Style="height:56px;">
+                            + ADD
+                        </MudButton>
+                    </MudItem>
+                </Authorized>
+            </AuthorizeView>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Equipment Table -->
+    <MudTable Items="@FilteredEquipment" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+              SortLabel="Sort by" AllowUnsorted="false" Striped="true">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<EquipmentDto, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<EquipmentDto, object>(x => x.SerialNumber)">Serial Number</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<EquipmentDto, object>(x => x.RoomName)">Room</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<EquipmentDto, object>(x => x.DateInstalled)">Installed</MudTableSortLabel></MudTh>
+            <MudTh>Expected Life</MudTh>
+            <MudTh>Remaining</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<EquipmentDto, object>(x => x.Status.ToString())">Status</MudTableSortLabel></MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Serial">@context.SerialNumber</MudTd>
+            <MudTd DataLabel="Room">@context.RoomName</MudTd>
+            <MudTd DataLabel="Installed">@context.DateInstalled.ToString("yyyy-MM-dd")</MudTd>
+            <MudTd DataLabel="Expected Life">@context.ExpectedLifeInYears yr(s)</MudTd>
+            <MudTd DataLabel="Remaining">
+                @{
+                    var rem = GetRemainingLife(context);
+                }
+                @if (rem.IsExpired)
+                {
+                    <MudText Color="Color.Error">Expired</MudText>
+                }
+                else if (rem.IsExpiringSoon)
+                {
+                    <MudText Color="Color.Warning">@rem.Display</MudText>
+                }
+                else
+                {
+                    <MudText>@rem.Display</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small" Color="Color.Info"
+                               OnClick="@(() => Nav.NavigateTo($"/equipment/{context.Id}/history"))"
+                               Title="View history" />
+                <AuthorizeView Roles="Admin" Context="rowCtx">
+                    <Authorized>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => OpenEditDialog(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                       Color="@(CanDelete(context) ? Color.Error : Color.Default)"
+                                       Disabled="@(!CanDelete(context))"
+                                       OnClick="@(() => OpenDeleteDialog(context))" />
+                    </Authorized>
+                </AuthorizeView>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    private List<EquipmentDto> _allEquipment = new();
+    private List<string> _rooms = new();
+    private bool _loading = true;
+    private string _searchText = "";
+    private string _filterRoom = "";
+    private string _filterStatus = "";
+    private string _filterLifecycle = "";
+
+    private IEnumerable<EquipmentDto> FilteredEquipment => _allEquipment.Where(e =>
+        (string.IsNullOrWhiteSpace(_searchText) ||
+         e.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+         e.SerialNumber.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterRoom)   || e.RoomName == _filterRoom) &&
+        (string.IsNullOrWhiteSpace(_filterStatus) || e.Status.ToString() == _filterStatus) &&
+        (string.IsNullOrWhiteSpace(_filterLifecycle) || MatchLifecycle(e, _filterLifecycle)));
+
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            _allEquipment = await EquipmentSvc.GetAllAsync();
+            _rooms        = await EquipmentSvc.GetRoomsAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var p = new DialogParameters { ["Equipment"] = null, ["Rooms"] = _rooms };
+        var d = await DialogSvc.ShowAsync<EquipmentDialog>("Add Equipment", p);
+        if (!(await d.Result)!.Canceled) await LoadDataAsync();
+    }
+
+    private async Task OpenEditDialog(EquipmentDto eq)
+    {
+        var p = new DialogParameters { ["Equipment"] = eq, ["Rooms"] = _rooms };
+        var d = await DialogSvc.ShowAsync<EquipmentDialog>("Edit Equipment", p);
+        if (!(await d.Result)!.Canceled) await LoadDataAsync();
+    }
+
+    private async Task OpenDeleteDialog(EquipmentDto eq)
+    {
+        var p = new DialogParameters { ["Equipment"] = eq };
+        var d = await DialogSvc.ShowAsync<DeleteEquipmentDialog>("Delete Equipment", p);
+        if (!(await d.Result)!.Canceled) await LoadDataAsync();
+    }
+
+    private static bool CanDelete(EquipmentDto e) =>
+        e.Status == EquipmentStatus.Retired || e.Status == EquipmentStatus.Decommissioned;
+
+    private static Color GetStatusColor(EquipmentStatus status) => status switch
+    {
+        EquipmentStatus.Active           => Color.Success,
+        EquipmentStatus.UnderMaintenance => Color.Warning,
+        EquipmentStatus.Retired          => Color.Error,
+        EquipmentStatus.Decommissioned   => Color.Default,
+        _                                => Color.Default
+    };
+
+    private static bool MatchLifecycle(EquipmentDto e, string filter)
+    {
+        var endDate = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+        var remaining = endDate - DateTime.UtcNow;
+        return filter switch
+        {
+            "Expired"      => remaining.TotalDays <= 0,
+            "ExpiringSoon" => remaining.TotalDays > 0 && remaining.TotalDays <= 180,
+            _              => true
+        };
+    }
+
+    private static (string Display, bool IsExpired, bool IsExpiringSoon) GetRemainingLife(EquipmentDto e)
+    {
+        var endDate = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+        var remaining = endDate - DateTime.UtcNow;
+        if (remaining.TotalDays <= 0) return ("Expired", true, false);
+        int years = (int)(remaining.TotalDays / 365);
+        int months = (int)((remaining.TotalDays % 365) / 30);
+        return ($"{years}y {months}m", false, remaining.TotalDays <= 180);
+    }
+}

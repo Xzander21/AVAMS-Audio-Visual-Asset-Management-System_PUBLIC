@@ -1,0 +1,101 @@
+@inject EquipmentService EquipmentSvc
+@using AVEquipmentManager.Shared.DTOs
+@using AVEquipmentManager.Shared.Enums
+
+<MudDialog>
+    <TitleContent>
+        <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Class="mr-2" Color="Color.Error" />
+        Mark as Disposed
+    </TitleContent>
+
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Confirm that <b>@Disposal?.EquipmentName</b> (Serial: @Disposal?.EquipmentSerial)
+            has been physically disposed via <b>@Disposal?.Method</b>.
+            The equipment will be set to <b>Decommissioned</b> and archived automatically.
+        </MudText>
+
+        <MudDivider Class="my-3" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-1" Size="Size.Small" />
+            Optional replacement from reserve
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Pick a Reserved (spare) unit to take the disposed unit's place.
+            The spare will be promoted to <b>Active</b> and inherit room
+            <b>@(Disposal?.EquipmentRoom ?? "(unassigned)")</b>.
+            Leave as <i>(no replacement)</i> if no spare is being used.
+        </MudText>
+
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+        }
+        else if (_reservedUnits.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">
+                No equipment is currently in Reserved status. Mark a unit as
+                Reserved on the Equipment page if you want to use it as a spare.
+            </MudAlert>
+        }
+        else
+        {
+            <MudSelect T="int?" Label="Replacement (optional)"
+                       @bind-Value="_selectedReplacementId"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem T="int?" Value="@((int?)null)">(no replacement)</MudSelectItem>
+                @foreach (var r in _reservedUnits)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)r.Id)">
+                        @r.SerialNumber — @r.Name (currently in @r.RoomName)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.Check"
+                   OnClick="Confirm">
+            Confirm Disposed
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public DisposalDto? Disposal { get; set; }
+
+    private List<EquipmentDto> _reservedUnits = new();
+    private int?               _selectedReplacementId;
+    private bool               _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var all = await EquipmentSvc.GetAllAsync();
+            _reservedUnits = all
+                .Where(e => e.Status == EquipmentStatus.Reserved)
+                .OrderBy(e => e.SerialNumber)
+                .ToList();
+        }
+        catch
+        {
+            _reservedUnits = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Confirm()
+    {
+        // Return the selected replacement ID (nullable) up to the caller.
+        MudDialog.Close(DialogResult.Ok<int?>(_selectedReplacementId));
+    }
+}

@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>1e3c28a3-8cd1-426c-bef0-eea1716afcab</UserSecretsId>
+  </PropertyGroup>
+
+  <!--
+    Finding #8 / CWE-1104 patch (2026-06-16): all package versions are pinned to
+    a single concrete patch release so `dotnet restore` is fully reproducible.
+    When you intentionally upgrade, bump the version here and re-run the audit.
+  -->
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.24" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.24" />
+    <!-- Note: Microsoft.AspNetCore.RateLimiting is part of the .NET 8 framework
+         (Microsoft.AspNetCore.App shared framework). No PackageReference needed. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.24">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.24" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AVEquipmentManager.Shared\AVEquipmentManager.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

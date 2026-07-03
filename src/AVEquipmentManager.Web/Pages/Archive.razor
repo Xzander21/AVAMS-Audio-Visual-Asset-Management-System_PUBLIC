@@ -1,0 +1,254 @@
+@page "/archive"
+@attribute [Authorize(Roles = "Admin,AVStaff,Staff")]
+@inject EquipmentService EquipmentSvc
+@inject StaffService StaffSvc
+@inject IDialogService DialogSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Archive - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Filled.Archive" Class="mr-2" /> Archive
+</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Equipment or staff records you delete are moved here. You can restore them or permanently delete them.
+</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabPanel>
+        <TabContent>
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Devices" Size="Size.Small" />
+                <MudText>Equipment</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">@_archivedEquipment.Count</MudChip>
+            </MudStack>
+        </TabContent>
+        <ChildContent>
+            @if (_loadingEquipment)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else if (_archivedEquipment.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">No archived equipment.</MudAlert>
+            }
+            else
+            {
+                <MudTextField @bind-Value="_eqSearch" Label="Search by name or serial"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" Class="mb-3" />
+
+                <MudTable Items="@FilteredEquipment" Dense="true" Hover="true" Striped="true"
+                          Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Serial</MudTh>
+                        <MudTh>Room</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Archived</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Serial">@context.SerialNumber</MudTd>
+                        <MudTd DataLabel="Room">@context.RoomName</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                @context.Status
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Archived">
+                            <MudText Typo="Typo.caption">
+                                @(context.ArchivedAt?.ToLocalTime().ToString("MMM d, yyyy HH:mm") ?? "—")
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Restore" Size="Size.Small" Color="Color.Success"
+                                           OnClick="@(() => RestoreEquipment(context))" Title="Restore" />
+                            @* Delete Forever — ADMIN ONLY per client agreement (2026-06-15). AVStaff cannot purge. *@
+                            <AuthorizeView Roles="Admin" Context="purgeEqCtx">
+                                <Authorized>
+                                    <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => PurgeEquipment(context))" Title="Permanently delete" />
+                                </Authorized>
+                            </AuthorizeView>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            }
+        </ChildContent>
+    </MudTabPanel>
+
+    <MudTabPanel>
+        <TabContent>
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" />
+                <MudText>Staff</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Default">@_archivedStaff.Count</MudChip>
+            </MudStack>
+        </TabContent>
+        <ChildContent>
+            @if (_loadingStaff)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else if (_archivedStaff.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">No archived staff records.</MudAlert>
+            }
+            else
+            {
+                <MudTextField @bind-Value="_staffSearch" Label="Search by name or Employee ID"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" Class="mb-3" />
+
+                <MudTable Items="@FilteredStaff" Dense="true" Hover="true" Striped="true"
+                          Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Employee ID</MudTh>
+                        <MudTh>Room</MudTh>
+                        <MudTh>Department</MudTh>
+                        <MudTh>Archived</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Employee ID">@context.EmployeeId</MudTd>
+                        <MudTd DataLabel="Room">@context.RoomNumber</MudTd>
+                        <MudTd DataLabel="Department">@(context.Department ?? "—")</MudTd>
+                        <MudTd DataLabel="Archived">
+                            <MudText Typo="Typo.caption">
+                                @(context.ArchivedAt?.ToLocalTime().ToString("MMM d, yyyy HH:mm") ?? "—")
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Restore" Size="Size.Small" Color="Color.Success"
+                                           OnClick="@(() => RestoreStaff(context))" Title="Restore" />
+                            @* Delete Forever — ADMIN ONLY per client agreement (2026-06-15). AVStaff cannot purge. *@
+                            <AuthorizeView Roles="Admin" Context="purgeStaffCtx">
+                                <Authorized>
+                                    <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => PurgeStaff(context))" Title="Permanently delete" />
+                                </Authorized>
+                            </AuthorizeView>
+                        </MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            }
+        </ChildContent>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private List<EquipmentDto> _archivedEquipment = new();
+    private List<StaffDto>     _archivedStaff     = new();
+    private bool _loadingEquipment = true;
+    private bool _loadingStaff     = true;
+    private string _eqSearch    = "";
+    private string _staffSearch = "";
+
+    private IEnumerable<EquipmentDto> FilteredEquipment => _archivedEquipment.Where(e =>
+        string.IsNullOrWhiteSpace(_eqSearch) ||
+        e.Name.Contains(_eqSearch, StringComparison.OrdinalIgnoreCase) ||
+        e.SerialNumber.Contains(_eqSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<StaffDto> FilteredStaff => _archivedStaff.Where(s =>
+        string.IsNullOrWhiteSpace(_staffSearch) ||
+        s.Name.Contains(_staffSearch, StringComparison.OrdinalIgnoreCase) ||
+        s.EmployeeId.Contains(_staffSearch, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadEquipmentAsync(), LoadStaffAsync());
+    }
+
+    private async Task LoadEquipmentAsync()
+    {
+        _loadingEquipment = true;
+        try { _archivedEquipment = await EquipmentSvc.GetArchivedAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loadingEquipment = false;
+    }
+
+    private async Task LoadStaffAsync()
+    {
+        _loadingStaff = true;
+        try { _archivedStaff = await StaffSvc.GetArchivedAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loadingStaff = false;
+    }
+
+    private async Task RestoreEquipment(EquipmentDto e)
+    {
+        bool? ok = await DialogSvc.ShowMessageBox(
+            "Restore equipment",
+            $"Restore '{e.Name}' (Serial: {e.SerialNumber}) from the archive?",
+            yesText: "Restore", cancelText: "Cancel");
+        if (ok != true) return;
+
+        var (data, error) = await EquipmentSvc.RestoreAsync(e.Id);
+        if (data != null) { _archivedEquipment.Remove(e); Snackbar.Add($"Restored '{e.Name}'.", Severity.Success); }
+        else Snackbar.Add($"Error: {error}", Severity.Error);
+    }
+
+    private async Task PurgeEquipment(EquipmentDto e)
+    {
+        // Finding #7 / CWE-79 patch (2026-06-16): the equipment name is operator-supplied
+        // free text. Wrapping it in MarkupString would render any embedded HTML/script
+        // payload directly inside the confirmation dialog. The plain-text overload of
+        // ShowMessageBox HTML-encodes its argument, so the same prompt is now safe.
+        bool? ok = await DialogSvc.ShowMessageBox(
+            "Permanently delete?",
+            $"This will permanently delete '{e.Name}' from the database. This cannot be undone.",
+            yesText: "Delete forever", cancelText: "Cancel");
+        if (ok != true) return;
+
+        var (success, error) = await EquipmentSvc.PurgeAsync(e.Id);
+        if (success) { _archivedEquipment.Remove(e); Snackbar.Add($"Permanently deleted '{e.Name}'.", Severity.Success); }
+        else Snackbar.Add($"Error: {error}", Severity.Error);
+    }
+
+    private async Task RestoreStaff(StaffDto s)
+    {
+        bool? ok = await DialogSvc.ShowMessageBox(
+            "Restore staff",
+            $"Restore '{s.Name}' (Employee ID: {s.EmployeeId}) from the archive?",
+            yesText: "Restore", cancelText: "Cancel");
+        if (ok != true) return;
+
+        var (data, error) = await StaffSvc.RestoreAsync(s.Id);
+        if (data != null) { _archivedStaff.Remove(s); Snackbar.Add($"Restored '{s.Name}'.", Severity.Success); }
+        else Snackbar.Add($"Error: {error}", Severity.Error);
+    }
+
+    private async Task PurgeStaff(StaffDto s)
+    {
+        // Finding #7 / CWE-79 patch (2026-06-16): see PurgeEquipment for the rationale —
+        // staff names are operator-supplied free text; render as plain text.
+        bool? ok = await DialogSvc.ShowMessageBox(
+            "Permanently delete?",
+            $"This will permanently delete '{s.Name}' from the database. This cannot be undone.",
+            yesText: "Delete forever", cancelText: "Cancel");
+        if (ok != true) return;
+
+        var (success, error) = await StaffSvc.PurgeAsync(s.Id);
+        if (success) { _archivedStaff.Remove(s); Snackbar.Add($"Permanently deleted '{s.Name}'.", Severity.Success); }
+        else Snackbar.Add($"Error: {error}", Severity.Error);
+    }
+
+    private static Color GetStatusColor(EquipmentStatus status) => status switch
+    {
+        EquipmentStatus.Active           => Color.Success,
+        EquipmentStatus.UnderMaintenance => Color.Warning,
+        EquipmentStatus.Retired          => Color.Error,
+        EquipmentStatus.Decommissioned   => Color.Default,
+        _                                => Color.Default
+    };
+}

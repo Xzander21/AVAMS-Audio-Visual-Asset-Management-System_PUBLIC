@@ -1,0 +1,127 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@inject AuthService AuthSvc
+
+<MudThemeProvider @ref="_mudThemeProvider" Theme="@_avamsTheme" @bind-IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="@ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2 d-none d-sm-flex">AVAMS — AV Asset Manager</MudText>
+        <MudText Typo="Typo.h6" Class="ml-2 d-flex d-sm-none">AVAMS</MudText>
+        <MudSpacer />
+
+        <!-- User info + logout (only when authenticated) -->
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Color="Color.Inherit" Class="mr-1 d-none d-sm-flex">
+                    @context.User.Identity?.Name
+                </MudText>
+                <AuthorizeView Roles="Admin" Context="adminCtx">
+                    <Authorized>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mr-2 d-none d-sm-flex">Admin</MudChip>
+                    </Authorized>
+                </AuthorizeView>
+                <AuthorizeView Roles="Staff" Context="staffCtx">
+                    <Authorized>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mr-2 d-none d-sm-flex">Staff</MudChip>
+                    </Authorized>
+                </AuthorizeView>
+                <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit"
+                               OnClick="@Logout" Title="Logout" />
+            </Authorized>
+        </AuthorizeView>
+
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit" OnClick="@ToggleTheme" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2"
+               Breakpoint="Breakpoint.Md" Variant="@DrawerVariant.Responsive">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">Navigation</MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="pa-2 pa-sm-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
+    private MudThemeProvider _mudThemeProvider = null!;
+
+    // ── AVAMS theme: green (primary) + yellow (accent), per logo ─────────────
+    private readonly MudTheme _avamsTheme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary       = "#2E7D32",   // forest green
+            PrimaryDarken = "#1B5E20",
+            PrimaryLighten= "#4CAF50",
+            Secondary     = "#FBC02D",   // logo yellow
+            Tertiary      = "#FFD54F",
+            Info          = "#0288D1",
+            Success       = "#43A047",
+            Warning       = "#F9A825",
+            Error         = "#C62828",
+            AppbarBackground = "#2E7D32",
+            AppbarText    = "#FFFFFF",
+            Background    = "#F8FAF6",
+            Surface       = "#FFFFFF",
+            DrawerBackground = "#FFFFFF",
+            DrawerText    = "#1B1B1B",
+            DrawerIcon    = "#2E7D32"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary       = "#66BB6A",
+            PrimaryDarken = "#388E3C",
+            PrimaryLighten= "#A5D6A7",
+            Secondary     = "#FFD54F",
+            Tertiary      = "#FFE082",
+            Info          = "#29B6F6",
+            Success       = "#66BB6A",
+            Warning       = "#FFB300",
+            Error         = "#EF5350",
+            AppbarBackground = "#1B5E20",
+            AppbarText    = "#FFFFFF",
+            Background    = "#121A14",
+            Surface       = "#1B2620",
+            DrawerBackground = "#16201A",
+            DrawerText    = "#E8F5E9",
+            DrawerIcon    = "#FFD54F"
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "8px"
+        }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await _mudThemeProvider.GetSystemPreference();
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleTheme() => _isDarkMode = !_isDarkMode;
+
+    private async Task Logout()
+    {
+        await AuthSvc.LogoutAsync();
+        Nav.NavigateTo("/login");
+    }
+}

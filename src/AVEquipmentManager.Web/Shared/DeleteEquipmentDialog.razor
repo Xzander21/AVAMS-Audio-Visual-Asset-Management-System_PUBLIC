@@ -1,0 +1,74 @@
+@inject EquipmentService EquipmentSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Archive" Color="Color.Warning" Class="mr-2" />
+            Archive Equipment
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Equipment != null && (Equipment.Status == EquipmentStatus.Retired || Equipment.Status == EquipmentStatus.Decommissioned))
+        {
+            <MudText>Move <strong>@Equipment.Name</strong> (SN: @Equipment.SerialNumber) to the archive?</MudText>
+            <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true">
+                The equipment will be hidden from listings but kept in the database. You can restore it any time from
+                <strong>Archive</strong> in the side menu.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning">
+                Only equipment with status <strong>Retired</strong> or <strong>Decommissioned</strong> can be archived.
+                This equipment has status: <strong>@Equipment?.Status</strong>.
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        @if (Equipment != null && (Equipment.Status == EquipmentStatus.Retired || Equipment.Status == EquipmentStatus.Decommissioned))
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="@DeleteAsync" Disabled="@_deleting"
+                       StartIcon="@Icons.Material.Filled.Archive">
+                @if (_deleting)
+                {
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                }
+                Archive
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public EquipmentDto? Equipment { get; set; }
+
+    private bool _deleting;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task DeleteAsync()
+    {
+        if (Equipment == null) return;
+        _deleting = true;
+        try
+        {
+            var (success, error) = await EquipmentSvc.DeleteAsync(Equipment.Id);
+            if (success)
+            {
+                Snackbar.Add($"'{Equipment.Name}' moved to archive.", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add($"Error: {error}", Severity.Error);
+            }
+        }
+        finally
+        {
+            _deleting = false;
+        }
+    }
+}

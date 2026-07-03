@@ -1,0 +1,237 @@
+@page "/track"
+@page "/track/{StaffId:int}"
+@attribute [Authorize]
+@inject StaffService StaffSvc
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Track Staff - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Filled.MyLocation" Class="mr-2" /> Track Staff
+</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Search a staff member (teacher) by name or Employee ID. We'll show their assigned room and every piece of equipment in it.
+</MudText>
+
+<!-- Search bar -->
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudAutocomplete T="StaffDto"
+                     Label="Search by name or Employee ID"
+                     SearchFunc="SearchStaff"
+                     ToStringFunc="@(s => s == null ? string.Empty : $"{s.Name} ({s.EmployeeId})")"
+                     Value="_selectedStaff"
+                     ValueChanged="OnStaffSelected"
+                     Adornment="Adornment.Start"
+                     AdornmentIcon="@Icons.Material.Filled.Search"
+                     ResetValueOnEmptyText="true"
+                     Clearable="true"
+                     ShowProgressIndicator="true"
+                     CoerceText="false">
+        <ItemTemplate Context="s">
+            <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Primary" />
+                <div>
+                    <MudText Typo="Typo.body1" Style="font-weight:500;">@s.Name</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @s.EmployeeId · @s.RoomNumber @(string.IsNullOrEmpty(s.Department) ? "" : "· " + s.Department)
+                    </MudText>
+                </div>
+            </MudStack>
+        </ItemTemplate>
+    </MudAutocomplete>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_tracking != null)
+{
+    <!-- Staff card -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-primary);">
+        <MudGrid AlignItems="Center">
+            <MudItem xs="12" md="8">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3">
+                    <MudAvatar Color="Color.Primary" Size="Size.Large">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                    </MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.h5">@_tracking.Staff.Name</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @_tracking.Staff.EmployeeId
+                            @if (!string.IsNullOrEmpty(_tracking.Staff.Department))
+                            {
+                                <span> · @_tracking.Staff.Department</span>
+                            }
+                        </MudText>
+                        @if (!string.IsNullOrEmpty(_tracking.Staff.Email) || !string.IsNullOrEmpty(_tracking.Staff.Phone))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_tracking.Staff.Email @(string.IsNullOrEmpty(_tracking.Staff.Phone) ? "" : " · " + _tracking.Staff.Phone)
+                            </MudText>
+                        }
+                    </div>
+                </MudStack>
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex justify-md-end justify-start">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.MeetingRoom" Color="Color.Secondary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Assigned Room</MudText>
+                        <MudText Typo="Typo.h5">@_tracking.Staff.RoomNumber</MudText>
+                    </div>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Equipment in that room -->
+    <MudText Typo="Typo.h6" Class="mb-2">
+        Equipment in @_tracking.Staff.RoomNumber
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Class="ml-2">@_tracking.Equipment.Count items</MudChip>
+    </MudText>
+
+    @if (_tracking.Equipment.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="my-2">
+            No equipment is currently assigned to @_tracking.Staff.RoomNumber.
+        </MudAlert>
+    }
+    else
+    {
+        <!-- Status filter -->
+        <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="4">
+                    <MudTextField @bind-Value="_filterText" Label="Filter by name or serial"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.FilterAlt"
+                                  Clearable="true" Immediate="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="4">
+                    <MudSelect T="string" Label="Status" @bind-Value="_filterStatus" Clearable="true">
+                        <MudSelectItem Value="@("")">All Statuses</MudSelectItem>
+                        <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                        <MudSelectItem Value="@("UnderMaintenance")">Under Maintenance</MudSelectItem>
+                        <MudSelectItem Value="@("Retired")">Retired</MudSelectItem>
+                        <MudSelectItem Value="@("Decommissioned")">Decommissioned</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudTable Items="@FilteredEquipment" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Serial</MudTh>
+                <MudTh>Installed</MudTh>
+                <MudTh>Remaining Life</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Serial">@context.SerialNumber</MudTd>
+                <MudTd DataLabel="Installed">@context.DateInstalled.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Remaining Life">
+                    @{
+                        var rem = GetRemainingLife(context);
+                    }
+                    @if (rem.IsExpired)
+                    {
+                        <MudText Color="Color.Error">Expired</MudText>
+                    }
+                    else
+                    {
+                        <MudText>@rem.Display</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Color="Color.Secondary" Class="pa-4">No equipment matches the filter.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    }
+}
+else if (_searchAttempted)
+{
+    <MudAlert Severity="Severity.Info">
+        Start typing a staff name or Employee ID above to begin tracking.
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public int? StaffId { get; set; }
+
+    private StaffDto? _selectedStaff;
+    private StaffTrackingDto? _tracking;
+    private bool _loading;
+    private bool _searchAttempted;
+    private string _filterText   = "";
+    private string _filterStatus = "";
+
+    private IEnumerable<EquipmentDto> FilteredEquipment =>
+        _tracking == null ? Enumerable.Empty<EquipmentDto>() :
+        _tracking.Equipment.Where(e =>
+            (string.IsNullOrWhiteSpace(_filterText) ||
+             e.Name.Contains(_filterText, StringComparison.OrdinalIgnoreCase) ||
+             e.SerialNumber.Contains(_filterText, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(_filterStatus) || e.Status.ToString() == _filterStatus));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (StaffId.HasValue)
+        {
+            await LoadTrackingAsync(StaffId.Value);
+        }
+    }
+
+    private async Task<IEnumerable<StaffDto>> SearchStaff(string value, CancellationToken token)
+    {
+        var list = await StaffSvc.GetAllAsync(search: value);
+        return list.Take(20);
+    }
+
+    private async Task OnStaffSelected(StaffDto? s)
+    {
+        _selectedStaff = s;
+        if (s != null) await LoadTrackingAsync(s.Id);
+        else { _tracking = null; _searchAttempted = true; }
+    }
+
+    private async Task LoadTrackingAsync(int id)
+    {
+        _loading = true;
+        _searchAttempted = true;
+        try
+        {
+            _tracking = await StaffSvc.TrackAsync(id);
+            if (_tracking != null) _selectedStaff = _tracking.Staff;
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private static Color GetStatusColor(EquipmentStatus status) => status switch
+    {
+        EquipmentStatus.Active           => Color.Success,
+        EquipmentStatus.UnderMaintenance => Color.Warning,
+        EquipmentStatus.Retired          => Color.Error,
+        EquipmentStatus.Decommissioned   => Color.Default,
+        _                                => Color.Default
+    };
+
+    private static (string Display, bool IsExpired) GetRemainingLife(EquipmentDto e)
+    {
+        var endDate = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+        var remaining = endDate - DateTime.UtcNow;
+        if (remaining.TotalDays <= 0) return ("Expired", true);
+        int years = (int)(remaining.TotalDays / 365);
+        int months = (int)((remaining.TotalDays % 365) / 30);
+        return ($"{years}y {months}m", false);
+    }
+}

@@ -1,0 +1,6 @@
+@AVEquipmentManager.API_HostAddress = http://localhost:5033
+
+GET {{AVEquipmentManager.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

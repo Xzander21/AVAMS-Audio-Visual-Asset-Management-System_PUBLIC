@@ -1,0 +1,223 @@
+@page "/kpis"
+@attribute [Authorize]
+@inject KpiService KpiSvc
+@inject ISnackbar Snackbar
+@using AVEquipmentManager.Shared.DTOs
+
+<PageTitle>KPIs - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Filled.Insights" Class="mr-2" /> Key Performance Indicators
+</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Aligned with the ITIL Service Asset and Configuration Management (SACM) practice.
+    Values are computed live from the underlying records.
+    @if (_kpi != null)
+    {
+        <span>Last computed: <strong>@_kpi.ComputedAt.ToLocalTime().ToString("MMM d, yyyy HH:mm")</strong></span>
+    }
+</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_kpi == null)
+{
+    <MudAlert Severity="Severity.Error">Could not load KPIs.</MudAlert>
+}
+else
+{
+    <!-- Top-line KPIs -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="Total Assets" Value="@_kpi.TotalAssets.ToString()" Unit="items"
+                     Description="Non-archived equipment under management."
+                     AccentColor="#2E7D32" Icon="@Icons.Material.Filled.Devices" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="Availability" Value="@_kpi.AvailabilityPercent.ToString("N1")" Unit="%"
+                     Description="Active assets ÷ total assets. Target: ≥ 85%."
+                     AccentColor="@(_kpi.AvailabilityPercent >= 85 ? "#2E7D32" : "#F9A825")"
+                     Icon="@Icons.Material.Filled.CheckCircle" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="Utilization" Value="@_kpi.UtilizationPercent.ToString("N1")" Unit="%"
+                     Description="Active + Under-Maintenance ÷ total. Indicates how much of the fleet is in service."
+                     AccentColor="#0288D1" Icon="@Icons.Material.Filled.TrendingUp" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="Lifecycle Compliance" Value="@_kpi.LifecycleCompliancePercent.ToString("N1")" Unit="%"
+                     Description="Assets within their expected service life. Target: ≥ 90%."
+                     AccentColor="@(_kpi.LifecycleCompliancePercent >= 90 ? "#2E7D32" : "#C62828")"
+                     Icon="@Icons.Material.Filled.EventAvailable" />
+        </MudItem>
+    </MudGrid>
+
+    <!-- Operational KPIs -->
+    <MudText Typo="Typo.h6" Class="mb-2 mt-2">Operational Performance</MudText>
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="MTBF" Value="@(_kpi.MeanTimeBetweenFailuresDays < 0 ? "—" : _kpi.MeanTimeBetweenFailuresDays.ToString("N1"))"
+                     Unit="days"
+                     Description="Mean Time Between Failures: average days between consecutive maintenance records on the same asset."
+                     AccentColor="#7B1FA2" Icon="@Icons.Material.Filled.Timer" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="MTTR" Value="@(_kpi.MeanTimeToRepairDays < 0 ? "—" : _kpi.MeanTimeToRepairDays.ToString("N1"))"
+                     Unit="days"
+                     Description="Mean Time To Repair: average time from ticket Open to Resolved. Lower is better."
+                     AccentColor="#F9A825" Icon="@Icons.Material.Filled.Build" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="Maintenance Backlog" Value="@_kpi.MaintenanceBacklog.ToString()" Unit="open tickets"
+                     Description="Open + In Progress maintenance records."
+                     AccentColor="@(_kpi.MaintenanceBacklog > 5 ? "#C62828" : "#2E7D32")"
+                     Icon="@Icons.Material.Filled.PendingActions" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Title="Resolved (30d)" Value="@_kpi.ResolvedLast30Days.ToString()" Unit="tickets"
+                     Description="Maintenance records resolved in the last 30 days."
+                     AccentColor="#2E7D32" Icon="@Icons.Material.Filled.TaskAlt" />
+        </MudItem>
+    </MudGrid>
+
+    <!-- Lifecycle KPIs -->
+    <MudText Typo="Typo.h6" Class="mb-2 mt-2">Asset Lifecycle Flow</MudText>
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="4">
+            <KpiCard Title="Acquired (90d)" Value="@_kpi.AcquiredLast90Days.ToString()" Unit="deployed"
+                     Description="Assets deployed via the Acquisition workflow in the last 90 days."
+                     AccentColor="#2E7D32" Icon="@Icons.Material.Filled.AddShoppingCart" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <KpiCard Title="Disposed (90d)" Value="@_kpi.DisposedLast90Days.ToString()" Unit="disposed"
+                     Description="Assets removed via the Disposal workflow in the last 90 days."
+                     AccentColor="#C62828" Icon="@Icons.Material.Filled.DeleteSweep" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="4">
+            <KpiCard Title="At-Risk Assets" Value="@_kpi.AtRiskAssets.ToString()" Unit="items"
+                     Description="Expired or expiring within 6 months. Candidates for replacement."
+                     AccentColor="@(_kpi.AtRiskAssets == 0 ? "#2E7D32" : "#F9A825")"
+                     Icon="@Icons.Material.Filled.Warning" />
+        </MudItem>
+    </MudGrid>
+
+    <!-- Lifespan Exhaustion Detail (per-asset) -->
+    <MudText Typo="Typo.h6" Class="mb-2 mt-4">Lifespan Exhaustion Detail</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Per-asset view of units at or above @(_lifespan?.ThresholdPercent ?? 90)% of their expected service life.
+        Triggers the disposal flow for end-of-life units.
+    </MudText>
+
+    @if (_lifespan == null)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true">Loading lifespan exhaustion detail…</MudAlert>
+    }
+    else
+    {
+        <MudGrid Class="mb-3">
+            <MudItem xs="12" sm="6" md="3">
+                <KpiCard Title="Past End-of-Life"
+                         Value="@_lifespan.AssetsPastEndOfLife.ToString()" Unit="assets"
+                         Description="Already past 100% of expected service life."
+                         AccentColor="@(_lifespan.AssetsPastEndOfLife == 0 ? "#2E7D32" : "#C62828")"
+                         Icon="@Icons.Material.Filled.ErrorOutline" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <KpiCard Title="Approaching EOL"
+                         Value="@_lifespan.AssetsApproachingEndOfLife.ToString()" Unit="assets"
+                         Description="Between threshold and 100% — candidates for disposal review."
+                         AccentColor="#F9A825"
+                         Icon="@Icons.Material.Filled.HourglassBottom" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <KpiCard Title="Avg Exhaustion (flagged)"
+                         Value="@_lifespan.AverageExhaustionPercent.ToString("N1")" Unit="%"
+                         Description="Mean exhaustion across flagged assets."
+                         AccentColor="#0288D1"
+                         Icon="@Icons.Material.Filled.Speed" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <KpiCard Title="Threshold"
+                         Value="@_lifespan.ThresholdPercent.ToString("N0")" Unit="%"
+                         Description="Lifespan-exhaustion cutoff for flagging."
+                         AccentColor="#7B1FA2"
+                         Icon="@Icons.Material.Filled.Tune" />
+            </MudItem>
+        </MudGrid>
+
+        @if (_lifespan.Rows.Count == 0)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true">
+                No assets are at or above the @(_lifespan.ThresholdPercent.ToString("N0"))% threshold. Fleet is healthy.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_lifespan.Rows" Dense="true" Hover="true" Striped="true"
+                      Breakpoint="Breakpoint.Sm" Elevation="1">
+                <HeaderContent>
+                    <MudTh>Serial</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Room</MudTh>
+                    <MudTh>Installed</MudTh>
+                    <MudTh>EoL Date</MudTh>
+                    <MudTh>Exhaustion %</MudTh>
+                    <MudTh>Days Remaining</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Serial">
+                        <MudText Typo="Typo.body2" Style="font-family:monospace;">@context.SerialNumber</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Room">@context.RoomName</MudTd>
+                    <MudTd DataLabel="Installed">@context.DateInstalled.ToString("yyyy-MM-dd")</MudTd>
+                    <MudTd DataLabel="EoL Date">@context.ExpectedEndOfLifeDate.ToString("yyyy-MM-dd")</MudTd>
+                    <MudTd DataLabel="Exhaustion %">
+                        <MudChip T="string" Size="Size.Small"
+                                 Color="@(context.IsPastEndOfLife ? Color.Error : Color.Warning)"
+                                 Variant="Variant.Filled">
+                            @context.ExhaustionPercent.ToString("N1")%
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Days Remaining">
+                        @(context.DaysRemaining < 0
+                            ? $"{Math.Abs(context.DaysRemaining)} overdue"
+                            : context.DaysRemaining.ToString())
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" />
+                </PagerContent>
+            </MudTable>
+        }
+    }
+
+    <MudPaper Class="pa-3 mt-4" Elevation="0" Outlined="true">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            <strong>ITIL alignment:</strong> The KPIs above implement the measurement layer of
+            ITIL's Service Asset and Configuration Management (SACM) practice — Availability and Utilization
+            reflect service-level commitments, MTBF/MTTR measure incident management efficiency,
+            and the lifecycle counters (Acquired, Disposed, Lifecycle Compliance, At-Risk, Lifespan Exhaustion) track the
+            Plan-Acquire-Deploy-Operate-Maintain-Retire-Dispose flow end-to-end.
+        </MudText>
+    </MudPaper>
+}
+
+@code {
+    private KpiDto? _kpi;
+    private LifespanExhaustionDto? _lifespan;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _kpi      = await KpiSvc.GetAsync();
+            _lifespan = await KpiSvc.GetLifespanExhaustionAsync(90.0);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

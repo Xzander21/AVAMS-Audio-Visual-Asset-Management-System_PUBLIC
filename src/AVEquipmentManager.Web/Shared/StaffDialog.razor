@@ -1,0 +1,130 @@
+@inject StaffService StaffSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Staff == null ? Icons.Material.Filled.PersonAdd : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Staff == null ? "Add Staff (Teacher)" : "Edit Staff (Teacher)")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.Name" Label="Full Name" Required="true"
+                                  RequiredError="Name is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.EmployeeId" Label="Employee ID" Required="true"
+                                  RequiredError="Employee ID is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="string" Label="Room Number" @bind-Value="_model.RoomNumber"
+                                     Required="true" RequiredError="Room is required"
+                                     SearchFunc="@SearchRoom" CoerceValue="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.Department" Label="Department" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.Email" Label="Email" InputType="InputType.Email" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.Phone" Label="Phone" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Submit" Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public StaffDto? Staff { get; set; }
+    [Parameter] public List<string> Rooms { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid;
+    private bool _saving;
+
+    private CreateStaffDto _model = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Staff != null)
+        {
+            _model = new CreateStaffDto
+            {
+                Name       = Staff.Name,
+                EmployeeId = Staff.EmployeeId,
+                RoomNumber = Staff.RoomNumber,
+                Department = Staff.Department,
+                Email      = Staff.Email,
+                Phone      = Staff.Phone
+            };
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchRoom(string value, CancellationToken _)
+    {
+        var results = string.IsNullOrWhiteSpace(value)
+            ? Rooms
+            : Rooms.Where(r => r.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!string.IsNullOrWhiteSpace(value) && !results.Contains(value))
+            results = results.Prepend(value).ToList();
+        return Task.FromResult<IEnumerable<string>>(results);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _saving = true;
+        try
+        {
+            if (Staff == null)
+            {
+                var (data, error) = await StaffSvc.CreateAsync(_model);
+                if (data != null)
+                {
+                    Snackbar.Add("Staff added successfully.", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else { Snackbar.Add($"Error: {error}", Severity.Error); }
+            }
+            else
+            {
+                var updateDto = new UpdateStaffDto
+                {
+                    Name       = _model.Name,
+                    EmployeeId = _model.EmployeeId,
+                    RoomNumber = _model.RoomNumber,
+                    Department = _model.Department,
+                    Email      = _model.Email,
+                    Phone      = _model.Phone
+                };
+                var (data, error) = await StaffSvc.UpdateAsync(Staff.Id, updateDto);
+                if (data != null)
+                {
+                    Snackbar.Add("Staff updated successfully.", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else { Snackbar.Add($"Error: {error}", Severity.Error); }
+            }
+        }
+        finally { _saving = false; }
+    }
+}

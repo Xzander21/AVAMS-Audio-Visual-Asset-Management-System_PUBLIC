@@ -1,0 +1,358 @@
+@page "/"
+@page "/dashboard"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject StaffService StaffSvc
+@inject TicketService TicketSvc
+@inject DisposalService DisposalSvc
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Dashboard" Class="mr-2" /> Dashboard
+</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <!-- ───────────────────────── Summary cards ───────────────────────── -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2" @onclick="@(() => Nav.NavigateTo("/equipment"))" Style="cursor:pointer;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Devices" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@_allEquipment.Count</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Equipment</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <AuthorizeView Roles="Admin" Context="staffCardCtx">
+            <Authorized>
+                <MudItem xs="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2" @onclick="@(() => Nav.NavigateTo("/staff"))" Style="cursor:pointer;">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" Size="Size.Large" />
+                            <div>
+                                <MudText Typo="Typo.h4">@_allStaff.Count</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Staff (Teachers)</MudText>
+                            </div>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            </Authorized>
+            <NotAuthorized>
+                <MudItem xs="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" Size="Size.Large" />
+                            <div>
+                                <MudText Typo="Typo.h4">@_allStaff.Count</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Staff (Teachers)</MudText>
+                            </div>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            </NotAuthorized>
+        </AuthorizeView>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Warning" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@NeedsRepair.Count</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Needs Repair</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2" Style="border-left:4px solid var(--mud-palette-error);">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Error" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4" Color="Color.Error">@(Expired.Count + ExpiringSoon.Count)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Expired / Expiring</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Transactions row -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" @onclick="@(() => Nav.NavigateTo("/tickets"))" Style="cursor:pointer;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Warning" Size="Size.Large" />
+                    <div style="flex:1">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Maintenance Records</MudText>
+                        <MudText Typo="Typo.h6">
+                            @_openTickets open · @_inProgressTickets in progress · @_resolvedTickets resolved
+                        </MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" @onclick="@(() => Nav.NavigateTo("/disposals"))" Style="cursor:pointer;">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Color="Color.Info" Size="Size.Large" />
+                    <div style="flex:1">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Disposal Transactions</MudText>
+                        <MudText Typo="Typo.h6">
+                            @(_disposalSummary?.Pending ?? 0) pending · @(_disposalSummary?.Approved ?? 0) approved · @(_disposalSummary?.Disposed ?? 0) disposed
+                        </MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid>
+        <!-- ─────────── Equipment needing repair ─────────── -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:100%;">
+                <MudStack Row AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Build" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6">Equipment Needing Repair</MudText>
+                    <MudSpacer />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@NeedsRepair.Count</MudChip>
+                </MudStack>
+                @if (NeedsRepair.Count == 0)
+                {
+                    <MudText Color="Color.Secondary" Typo="Typo.body2">No equipment currently needs repair.</MudText>
+                }
+                else
+                {
+                    @foreach (var e in NeedsRepair.Take(8))
+                    {
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+                            <div>
+                                <MudText Typo="Typo.body2" Style="font-weight:500;">@e.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @e.SerialNumber · @e.RoomName
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    }
+                    @if (NeedsRepair.Count > 8)
+                    {
+                        <MudButton Size="Size.Small" Color="Color.Primary" Class="mt-2"
+                                   OnClick="@(() => Nav.NavigateTo("/equipment"))">
+                            View all (@NeedsRepair.Count)
+                        </MudButton>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- ─────────── Expiring warranties / items ─────────── -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:100%;">
+                <MudStack Row AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.EventBusy" Color="Color.Error" />
+                    <MudText Typo="Typo.h6">Expired / Expiring Soon</MudText>
+                    <MudSpacer />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@(Expired.Count + ExpiringSoon.Count)</MudChip>
+                </MudStack>
+
+                @if (Expired.Count == 0 && ExpiringSoon.Count == 0)
+                {
+                    <MudText Color="Color.Secondary" Typo="Typo.body2">No equipment is expired or expiring soon.</MudText>
+                }
+                else
+                {
+                    @foreach (var e in Expired.Take(5))
+                    {
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                            <div>
+                                <MudText Typo="Typo.body2" Style="font-weight:500;">@e.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    Expired · @e.RoomName · installed @e.DateInstalled.ToString("MMM yyyy")
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    }
+                    @foreach (var e in ExpiringSoon.Take(5))
+                    {
+                        var end = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" Size="Size.Small" />
+                            <div>
+                                <MudText Typo="Typo.body2" Style="font-weight:500;">@e.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Warning">
+                                    Expires @end.ToString("MMM d, yyyy") · @e.RoomName
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- ─────────── Equipment by room overview ─────────── -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:100%;">
+                <MudStack Row AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.MeetingRoom" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Equipment by Room</MudText>
+                    <MudSpacer />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@RoomStats.Count rooms</MudChip>
+                </MudStack>
+                @if (RoomStats.Count == 0)
+                {
+                    <MudText Color="Color.Secondary" Typo="Typo.body2">No rooms with equipment yet.</MudText>
+                }
+                else
+                {
+                    <MudTable Items="@RoomStats" Dense="true" Hover="true" Breakpoint="Breakpoint.Xs">
+                        <HeaderContent>
+                            <MudTh>Room</MudTh>
+                            <MudTh Style="text-align:right;">Equipment</MudTh>
+                            <MudTh Style="text-align:right;">Active</MudTh>
+                            <MudTh Style="text-align:right;">Issues</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Room">
+                                <MudText Style="font-weight:500;">@context.Room</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Total" Style="text-align:right;">@context.Total</MudTd>
+                            <MudTd DataLabel="Active" Style="text-align:right;">
+                                <MudText Color="Color.Success">@context.Active</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Issues" Style="text-align:right;">
+                                <MudText Color="@(context.Issues > 0 ? Color.Warning : Color.Default)">
+                                    @context.Issues
+                                </MudText>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <!-- ─────────── Recent additions ─────────── -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2" Style="height:100%;">
+                <MudStack Row AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6">Recent Additions</MudText>
+                </MudStack>
+                @if (RecentEquipment.Count == 0)
+                {
+                    <MudText Color="Color.Secondary" Typo="Typo.body2">No recent equipment additions.</MudText>
+                }
+                else
+                {
+                    @foreach (var e in RecentEquipment)
+                    {
+                        <MudStack Row AlignItems="AlignItems.Center" Spacing="2" Class="py-1">
+                            <MudIcon Icon="@Icons.Material.Filled.AddBox" Color="Color.Success" Size="Size.Small" />
+                            <div>
+                                <MudText Typo="Typo.body2" Style="font-weight:500;">@e.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @e.RoomName · added @TimeAgo(e.CreatedAt)
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private List<EquipmentDto> _allEquipment = new();
+    private List<StaffDto>     _allStaff     = new();
+    private int _openTickets, _inProgressTickets, _resolvedTickets;
+    private DisposalSummaryClientDto? _disposalSummary;
+    private bool _loading = true;
+
+    private List<EquipmentDto> NeedsRepair =>
+        _allEquipment.Where(e => e.Status == EquipmentStatus.UnderMaintenance).ToList();
+
+    private List<EquipmentDto> Expired =>
+        _allEquipment.Where(e =>
+            e.Status != EquipmentStatus.Retired &&
+            e.Status != EquipmentStatus.Decommissioned &&
+            (e.DateInstalled.AddYears(e.ExpectedLifeInYears) - DateTime.UtcNow).TotalDays <= 0).ToList();
+
+    private List<EquipmentDto> ExpiringSoon =>
+        _allEquipment.Where(e =>
+        {
+            var days = (e.DateInstalled.AddYears(e.ExpectedLifeInYears) - DateTime.UtcNow).TotalDays;
+            return e.Status == EquipmentStatus.Active && days > 0 && days <= 180;
+        }).ToList();
+
+    private List<RoomStat> RoomStats =>
+        _allEquipment
+            .GroupBy(e => e.RoomName)
+            .Select(g => new RoomStat
+            {
+                Room   = g.Key,
+                Total  = g.Count(),
+                Active = g.Count(x => x.Status == EquipmentStatus.Active),
+                Issues = g.Count(x => x.Status == EquipmentStatus.UnderMaintenance)
+            })
+            .OrderBy(r => r.Room)
+            .ToList();
+
+    private List<EquipmentDto> RecentEquipment =>
+        _allEquipment.OrderByDescending(e => e.CreatedAt).Take(8).ToList();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var eqTask       = EquipmentSvc.GetAllAsync();
+            var staffTask    = StaffSvc.GetAllAsync();
+            var ticketTask   = TicketSvc.GetSummaryAsync();
+            var disposalTask = DisposalSvc.GetSummaryAsync();
+            await Task.WhenAll(eqTask, staffTask, ticketTask, disposalTask);
+            _allEquipment = eqTask.Result;
+            _allStaff     = staffTask.Result;
+            var ts = ticketTask.Result;
+            if (ts != null)
+            {
+                _openTickets       = ts.Open;
+                _inProgressTickets = ts.InProgress;
+                _resolvedTickets   = ts.Resolved + ts.Closed;
+            }
+            _disposalSummary = disposalTask.Result;
+        }
+        catch (Exception ex) { Snackbar.Add($"Error loading dashboard: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private static string TimeAgo(DateTime utc)
+    {
+        var diff = DateTime.UtcNow - utc;
+        if (diff.TotalMinutes < 1)   return "just now";
+        if (diff.TotalHours   < 1)   return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalDays    < 1)   return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays    < 30)  return $"{(int)diff.TotalDays}d ago";
+        if (diff.TotalDays    < 365) return $"{(int)(diff.TotalDays / 30)}mo ago";
+        return $"{(int)(diff.TotalDays / 365)}y ago";
+    }
+
+    private class RoomStat
+    {
+        public string Room   { get; set; } = "";
+        public int    Total  { get; set; }
+        public int    Active { get; set; }
+        public int    Issues { get; set; }
+    }
+}

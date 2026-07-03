@@ -1,0 +1,120 @@
+@inject AcquisitionService AcquisitionSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Acquisition == null ? Icons.Material.Filled.AddShoppingCart : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Acquisition == null ? "Plan New Acquisition" : "Edit Acquisition")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_itemName" Label="Item Name" Required="true"
+                                  RequiredError="Item name is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="AssetCategory" Label="Category" @bind-Value="_category">
+                        @foreach (AssetCategory cat in Enum.GetValues(typeof(AssetCategory)))
+                        {
+                            <MudSelectItem Value="@cat">@cat</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_vendor" Label="Vendor" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_po" Label="PO Number" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField @bind-Value="_quantity" Label="Quantity" Min="1" Required="true" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="decimal?" @bind-Value="_unitCost" Label="Unit Cost (₱)" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTextField @bind-Value="_intendedRoom" Label="Intended Room" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_notes" Label="Notes" Lines="2" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Submit" Disabled="@_saving">
+            @if (_saving) { <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" /> }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public AcquisitionDto? Acquisition { get; set; }
+
+    private MudForm _form = null!;
+    private bool _isValid, _saving;
+
+    private string _itemName = "";
+    private AssetCategory _category = AssetCategory.Other;
+    private string? _vendor, _po, _intendedRoom, _notes;
+    private int _quantity = 1;
+    private decimal? _unitCost;
+
+    protected override void OnParametersSet()
+    {
+        if (Acquisition != null)
+        {
+            _itemName     = Acquisition.ItemName;
+            _category     = Acquisition.Category;
+            _vendor       = Acquisition.Vendor;
+            _po           = Acquisition.PurchaseOrderNumber;
+            _quantity     = Acquisition.Quantity;
+            _unitCost     = Acquisition.UnitCost;
+            _intendedRoom = Acquisition.IntendedRoom;
+            _notes        = Acquisition.Notes;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+        _saving = true;
+        try
+        {
+            if (Acquisition == null)
+            {
+                var dto = new CreateAcquisitionDto
+                {
+                    ItemName = _itemName, Category = _category, Vendor = _vendor,
+                    PurchaseOrderNumber = _po, Quantity = _quantity, UnitCost = _unitCost,
+                    IntendedRoom = _intendedRoom, Notes = _notes
+                };
+                var (data, err) = await AcquisitionSvc.CreateAsync(dto);
+                if (data != null) { Snackbar.Add($"Acquisition #{data.Id} planned.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
+                else Snackbar.Add($"Error: {err}", Severity.Error);
+            }
+            else
+            {
+                var dto = new UpdateAcquisitionDto
+                {
+                    ItemName = _itemName, Category = _category, Vendor = _vendor,
+                    PurchaseOrderNumber = _po, Quantity = _quantity, UnitCost = _unitCost,
+                    IntendedRoom = _intendedRoom, Notes = _notes
+                };
+                var (data, err) = await AcquisitionSvc.UpdateAsync(Acquisition.Id, dto);
+                if (data != null) { Snackbar.Add("Updated.", Severity.Success); MudDialog.Close(DialogResult.Ok(true)); }
+                else Snackbar.Add($"Error: {err}", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+}

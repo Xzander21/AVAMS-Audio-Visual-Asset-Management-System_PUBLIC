@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AV Equipment Manager — Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ════════════════════════════════════════════════════════
+       LOGIN / WELCOME SCREEN
+       ════════════════════════════════════════════════════════ -->
+  <div id="screen-login" class="screen active">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">📡</div>
+        <h1>AV Equipment Manager</h1>
+        <p>Sign in to access your dashboard</p>
+      </div>
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" placeholder="admin@avmanager.local" value="admin@avmanager.local" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="login-pass">Password</label>
+          <input id="login-pass" type="password" placeholder="••••••••" value="password" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn-primary">Sign In</button>
+      </form>
+      <p class="login-hint">Prototype: any non-empty credentials work.</p>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════
+       SIDEBAR
+       ════════════════════════════════════════════════════════ -->
+  <nav id="sidebar" class="hidden">
+    <div class="sidebar-logo">
+      <div class="logo-icon">📡</div>
+      <span>AV Equipment<br>Manager</span>
+    </div>
+    <ul class="nav-list">
+      <li>
+        <button class="nav-btn" data-screen="dashboard" onclick="navigate('dashboard')">
+          <span class="nav-icon">📊</span> Dashboard
+        </button>
+      </li>
+      <li>
+        <button class="nav-btn" data-screen="chat" onclick="navigate('chat')">
+          <span class="nav-icon">💬</span> Chatbot
+        </button>
+      </li>
+      <li>
+        <button class="nav-btn" data-screen="settings" onclick="navigate('settings')">
+          <span class="nav-icon">⚙️</span> Settings
+        </button>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- ════════════════════════════════════════════════════════
+       MAIN AREA
+       ════════════════════════════════════════════════════════ -->
+  <div id="main">
+
+    <!-- Top bar -->
+    <header id="topbar" class="hidden">
+      <button id="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+      <span id="topbar-title"></span>
+      <div class="topbar-avatar" title="Logged in" onclick="navigate('settings')">AU</div>
+    </header>
+
+    <!-- Screen area -->
+    <main id="screen-area">
+
+      <!-- ──────────────────────────────────────────────────
+           DASHBOARD SCREEN
+           ────────────────────────────────────────────────── -->
+      <div id="screen-dashboard" class="screen">
+        <h1 class="page-title">Dashboard</h1>
+
+        <!-- Summary cards -->
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue">📦</div>
+            <div>
+              <div class="stat-num" id="stat-total">—</div>
+              <div class="stat-label">Total Equipment</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">✅</div>
+            <div>
+              <div class="stat-num" id="stat-active">—</div>
+              <div class="stat-label">Active</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon orange">🔧</div>
+            <div>
+              <div class="stat-num" id="stat-maint">—</div>
+              <div class="stat-label">Under Maintenance</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon red">📁</div>
+            <div>
+              <div class="stat-num" id="stat-retd">—</div>
+              <div class="stat-label">Retired / Decomm.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Equipment table card -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Equipment Inventory</span>
+            <div class="search-box">
+              <span>🔍</span>
+              <input id="asset-search" type="search" placeholder="Search name or serial…"
+                     oninput="handleSearch(this.value)" aria-label="Search assets" />
+            </div>
+          </div>
+
+          <!-- Filter chips -->
+          <div class="filter-row" role="group" aria-label="Filter by status">
+            <button class="filter-chip active" data-filter="all"              onclick="setFilter('all')">All</button>
+            <button class="filter-chip"        data-filter="Active"           onclick="setFilter('Active')">Active</button>
+            <button class="filter-chip"        data-filter="UnderMaintenance" onclick="setFilter('UnderMaintenance')">Maintenance</button>
+            <button class="filter-chip"        data-filter="Retired"          onclick="setFilter('Retired')">Retired</button>
+            <button class="filter-chip"        data-filter="Decommissioned"   onclick="setFilter('Decommissioned')">Decommissioned</button>
+          </div>
+
+          <!-- Table -->
+          <div style="overflow-x:auto">
+            <table class="asset-table" aria-label="Equipment inventory">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Serial</th>
+                  <th>Room</th>
+                  <th>Installed</th>
+                  <th>Remaining Life</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="assets-tbody">
+                <!-- Filled by renderDashboard() -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /screen-dashboard -->
+
+      <!-- ──────────────────────────────────────────────────
+           ASSET DETAIL SCREEN
+           ────────────────────────────────────────────────── -->
+      <div id="screen-detail" class="screen">
+        <button class="back-btn" onclick="navigate('dashboard')">← Back to Dashboard</button>
+
+        <div class="card">
+          <div class="detail-header">
+            <div>
+              <div class="detail-title" id="detail-name">—</div>
+              <div class="detail-serial" id="detail-serial">—</div>
+            </div>
+            <span id="detail-badge" class="badge">—</span>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-field">
+              <label>Room</label>
+              <div class="val" id="detail-room">—</div>
+            </div>
+            <div class="detail-field">
+              <label>Date Installed</label>
+              <div class="val" id="detail-installed">—</div>
+            </div>
+            <div class="detail-field">
+              <label>Expected Life</label>
+              <div class="val" id="detail-life">—</div>
+            </div>
+            <div class="detail-field">
+              <label>Remaining Life</label>
+              <div class="val" id="detail-remaining">—</div>
+            </div>
+          </div>
+
+          <!-- Lifetime progress bar -->
+          <div class="detail-field" style="margin-bottom:1.25rem">
+            <label>Lifetime Usage</label>
+            <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+              <div id="detail-life-fill" class="progress-bar-fill fill-green" style="width:0%"></div>
+            </div>
+            <small id="detail-life-pct" style="color:var(--text-secondary);font-size:0.75rem;margin-top:0.3rem;display:block"></small>
+          </div>
+
+          <!-- Maintenance timeline -->
+          <div class="detail-field">
+            <label>Maintenance History</label>
+            <div class="timeline" id="detail-timeline">
+              <!-- Filled by renderDetail() -->
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div style="display:flex;gap:0.75rem;margin-top:1rem;flex-wrap:wrap">
+            <button class="btn-primary" style="width:auto;padding:0.5rem 1.25rem"
+                    onclick="showToast('Edit dialog — prototype only')">✏️ Edit Asset</button>
+            <button style="background:rgba(244,67,54,0.12);color:var(--error);border:1px solid rgba(244,67,54,0.3);padding:0.5rem 1.25rem"
+                    onclick="showToast('Delete — prototype only')">🗑️ Delete</button>
+            <button style="background:var(--surface-3);color:var(--text);padding:0.5rem 1.25rem"
+                    onclick="navigate('chat')">💬 Ask Chatbot</button>
+          </div>
+        </div>
+      </div><!-- /screen-detail -->
+
+      <!-- ──────────────────────────────────────────────────
+           CHAT SCREEN
+           ────────────────────────────────────────────────── -->
+      <div id="screen-chat" class="screen">
+        <h1 class="page-title">AV Equipment Chatbot</h1>
+
+        <div class="chat-wrap card" style="padding:0">
+          <!-- Messages -->
+          <div id="chat-messages" class="chat-messages" style="padding:1rem">
+            <!-- Filled dynamically -->
+          </div>
+
+          <!-- Quick-action chips -->
+          <div class="quick-chips" style="padding:0.5rem 1rem" aria-label="Quick actions">
+            <button class="quick-chip" onclick="sendQuickChip('Room 1')">Room 1</button>
+            <button class="quick-chip" onclick="sendQuickChip('Room 2')">Room 2</button>
+            <button class="quick-chip" onclick="sendQuickChip('Room 3')">Room 3</button>
+            <button class="quick-chip" onclick="sendQuickChip('Active Equipment')">Active</button>
+            <button class="quick-chip" onclick="sendQuickChip('Maintenance')">Maintenance</button>
+            <button class="quick-chip" onclick="sendQuickChip('Retired')">Retired</button>
+            <button class="quick-chip" onclick="sendQuickChip('Summary')">Summary</button>
+          </div>
+
+          <!-- Input row -->
+          <div class="chat-input-row" style="padding:0.75rem 1rem">
+            <input id="chat-input" type="text"
+                   placeholder="Ask about your AV equipment…"
+                   onkeydown="handleChatKey(event)"
+                   aria-label="Chat message input" />
+            <button class="btn-send" onclick="sendChatMessage()" aria-label="Send message">➤</button>
+          </div>
+        </div>
+      </div><!-- /screen-chat -->
+
+      <!-- ──────────────────────────────────────────────────
+           SETTINGS SCREEN
+           ────────────────────────────────────────────────── -->
+      <div id="screen-settings" class="screen">
+        <h1 class="page-title">Settings</h1>
+
+        <div class="card">
+
+          <!-- Profile -->
+          <div class="settings-section">
+            <h3>Profile</h3>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="set-name">Display Name</label>
+              </div>
+              <input id="set-name" type="text" style="max-width:220px" />
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label for="set-email">Email</label>
+              </div>
+              <input id="set-email" type="email" style="max-width:220px" />
+            </div>
+          </div>
+
+          <!-- Preferences -->
+          <div class="settings-section">
+            <h3>Preferences</h3>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>Dark Mode</label>
+                <small>Use dark colour scheme (always on in this prototype)</small>
+              </div>
+              <label class="toggle">
+                <input id="toggle-dark" type="checkbox" checked disabled />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>Email Notifications</label>
+                <small>Notify when equipment nears end-of-life</small>
+              </div>
+              <label class="toggle">
+                <input id="toggle-notif" type="checkbox" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>Auto-Refresh Dashboard</label>
+                <small>Refresh equipment list every 60 s</small>
+              </div>
+              <label class="toggle">
+                <input id="toggle-refresh" type="checkbox" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>Compact Table View</label>
+                <small>Reduce row padding in the equipment table</small>
+              </div>
+              <label class="toggle">
+                <input id="toggle-compact" type="checkbox" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <label>Chatbot Sound Effects</label>
+                <small>Play a chime when a bot message arrives</small>
+              </div>
+              <label class="toggle">
+                <input id="toggle-sounds" type="checkbox" />
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+            <button class="btn-primary" style="width:auto;padding:0.5rem 1.25rem"
+                    onclick="saveSettings()">💾 Save Settings</button>
+            <button class="btn-logout" onclick="logout()">🚪 Sign Out</button>
+          </div>
+
+        </div>
+      </div><!-- /screen-settings -->
+
+    </main><!-- /screen-area -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Toast -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

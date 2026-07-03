@@ -1,0 +1,188 @@
+@inject EquipmentService EquipmentSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Equipment == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Equipment == null ? "Add Equipment" : "Edit Equipment")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.Name" Label="Name" Required="true"
+                                  RequiredError="Name is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.SerialNumber" Label="Serial Number" Required="true"
+                                  RequiredError="Serial Number is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudAutocomplete T="string" Label="Room" @bind-Value="_model.RoomName"
+                                     Required="true" RequiredError="Room is required"
+                                     SearchFunc="@SearchRoom" CoerceValue="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_dateInstalled" Label="Date Installed"
+                                   Required="true" RequiredError="Date is required" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_model.ExpectedLifeInYears" Label="Expected Life (years)"
+                                     Required="true" Min="1" Max="100"
+                                     HelperText="Default 5 years per the institution's standard AV retirement policy. Override only when warranted." />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="EquipmentStatus" Label="Status" @bind-Value="_model.Status" Required="true">
+                        @foreach (EquipmentStatus s in Enum.GetValues(typeof(EquipmentStatus)))
+                        {
+                            <MudSelectItem Value="@s">@s</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Cable" Class="mr-1" Size="Size.Small" />
+                        Accessories installed with this unit
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="_model.HasAppleTv"
+                                 Label="Has Apple TV"
+                                 Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="_model.HasWallSpeaker"
+                                 Label="Has wall speaker"
+                                 Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudCheckBox T="bool" @bind-Value="_model.HasRemoteHolder"
+                                 Label="Has remote holder"
+                                 Color="Color.Primary" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_model.Notes" Label="Notes" Lines="3" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Submit" Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public EquipmentDto? Equipment { get; set; }
+    [Parameter] public List<string> Rooms { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid;
+    private bool _saving;
+
+    private CreateEquipmentDto _model = new()
+    {
+        DateInstalled = DateTime.UtcNow,
+        ExpectedLifeInYears = 5
+    };
+
+    private DateTime? _dateInstalled = DateTime.UtcNow;
+
+    protected override void OnParametersSet()
+    {
+        if (Equipment != null)
+        {
+            _model = new CreateEquipmentDto
+            {
+                Name = Equipment.Name,
+                SerialNumber = Equipment.SerialNumber,
+                RoomName = Equipment.RoomName,
+                DateInstalled = Equipment.DateInstalled,
+                ExpectedLifeInYears = Equipment.ExpectedLifeInYears,
+                Status = Equipment.Status,
+                HasAppleTv = Equipment.HasAppleTv,
+                HasWallSpeaker = Equipment.HasWallSpeaker,
+                HasRemoteHolder = Equipment.HasRemoteHolder,
+                Notes = Equipment.Notes
+            };
+            _dateInstalled = Equipment.DateInstalled;
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchRoom(string value, CancellationToken _)
+    {
+        var results = string.IsNullOrWhiteSpace(value)
+            ? Rooms
+            : Rooms.Where(r => r.Contains(value, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!string.IsNullOrWhiteSpace(value) && !results.Contains(value))
+            results = results.Prepend(value).ToList();
+        return Task.FromResult<IEnumerable<string>>(results);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _model.DateInstalled = _dateInstalled?.ToUniversalTime() ?? DateTime.UtcNow;
+        _saving = true;
+
+        try
+        {
+            if (Equipment == null)
+            {
+                var (data, error) = await EquipmentSvc.CreateAsync(_model);
+                if (data != null)
+                {
+                    Snackbar.Add("Equipment added successfully.", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add($"Error: {error}", Severity.Error);
+                }
+            }
+            else
+            {
+                var updateDto = new UpdateEquipmentDto
+                {
+                    Name = _model.Name,
+                    SerialNumber = _model.SerialNumber,
+                    RoomName = _model.RoomName,
+                    DateInstalled = _model.DateInstalled,
+                    ExpectedLifeInYears = _model.ExpectedLifeInYears,
+                    Status = _model.Status,
+                    HasAppleTv = _model.HasAppleTv,
+                    HasWallSpeaker = _model.HasWallSpeaker,
+                    HasRemoteHolder = _model.HasRemoteHolder,
+                    Notes = _model.Notes
+                };
+                var (data, error) = await EquipmentSvc.UpdateAsync(Equipment.Id, updateDto);
+                if (data != null)
+                {
+                    Snackbar.Add("Equipment updated successfully.", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add($"Error: {error}", Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

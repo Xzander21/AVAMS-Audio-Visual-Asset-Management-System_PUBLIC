@@ -1,0 +1,77 @@
+@page "/reports/maintenance"
+@attribute [Authorize]
+@inject TicketService TicketSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Maintenance History Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Maintenance History Report"
+              Subtitle="@($"Total maintenance records: {_items.Count}")">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#0288D1;">@_items.Count(t => t.Status == TicketStatus.Open)</MudText>
+                <MudText Typo="Typo.caption">Open</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#F9A825;">@_items.Count(t => t.Status == TicketStatus.InProgress)</MudText>
+                <MudText Typo="Typo.caption">In Progress</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#2E7D32;">@_items.Count(t => t.Status == TicketStatus.Resolved)</MudText>
+                <MudText Typo="Typo.caption">Resolved</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5">@_items.Count(t => t.Status == TicketStatus.Closed)</MudText>
+                <MudText Typo="Typo.caption">Closed</MudText>
+            </MudPaper></MudItem>
+        </MudGrid>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead>
+                <tr style="background:#E8F5E9; color:#1B5E20;">
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">#</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Title</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Equipment</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Type</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Priority</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Status</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Reported By</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in _items.OrderByDescending(x => x.CreatedAt))
+                {
+                    <tr>
+                        <td style="border:1px solid #ccc; padding:6px;">#@t.Id</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@t.Title</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@t.EquipmentName <small>(@t.EquipmentRoom)</small></td>
+                        <td style="border:1px solid #ccc; padding:6px;">@t.Type</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@t.Priority</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@t.Status</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@(t.ReportedBy ?? "—")</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@t.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</ReportHeader>
+
+@code {
+    private List<TicketDto> _items = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _items = await TicketSvc.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

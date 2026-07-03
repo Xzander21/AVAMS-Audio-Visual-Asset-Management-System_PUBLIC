@@ -1,0 +1,172 @@
+@page "/chatbot"
+@attribute [Authorize(Roles = "Admin,AVStaff,Staff")]
+@inject ChatService ChatSvc
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Chatbot - AV Equipment Manager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">AV Equipment Chatbot</MudText>
+
+<MudPaper Elevation="2" Style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:400px;">
+    <!-- Messages area -->
+    <MudPaper id="chat-messages" Elevation="0" Class="pa-4 flex-grow-1"
+              Style="overflow-y:auto;background:transparent;">
+        @foreach (var msg in _messages)
+        {
+            <div class="@(msg.IsUser ? "d-flex justify-end mb-2" : "d-flex justify-start mb-2")">
+                <MudPaper Elevation="1" Class="pa-3"
+                          Style="@($"{GetMessageStyle(msg.IsUser)} max-width:70%;white-space:pre-wrap;")">
+                    <MudText Typo="Typo.body2">@msg.Message</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                        @msg.Timestamp.ToLocalTime().ToString("HH:mm")
+                    </MudText>
+                </MudPaper>
+            </div>
+        }
+        @if (_thinking)
+        {
+            <div class="d-flex justify-start mb-2">
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                    <MudText Typo="Typo.body2" Class="ml-2 d-inline">Thinking...</MudText>
+                </MudPaper>
+            </div>
+        }
+    </MudPaper>
+
+    <!-- Quick action chips -->
+    <MudPaper Elevation="0" Class="px-4 py-2" Style="border-top:1px solid rgba(255,255,255,0.1)">
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Quick actions:</MudText>
+        <MudChipSet T="string">
+            @foreach (var chip in _quickChips)
+            {
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small"
+                         OnClick="@(() => SendQuickChip(chip))">@chip</MudChip>
+            }
+        </MudChipSet>
+    </MudPaper>
+
+    <!-- Input area -->
+    <MudPaper Elevation="0" Class="pa-3" Style="border-top:1px solid rgba(255,255,255,0.1)">
+        <MudStack Row Spacing="2">
+            <MudTextField @bind-Value="_inputMessage" Label="Ask about your AV equipment..."
+                          Variant="Variant.Outlined" Lines="1" FullWidth="true"
+                          @onkeydown="@HandleKeyDown" Disabled="@_thinking"
+                          Immediate="true" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@SendMessage"
+                       Disabled="@(_thinking || string.IsNullOrWhiteSpace(_inputMessage))"
+                       Style="min-width:100px;align-self:center;">
+                Send
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudPaper>
+
+@code {
+    private List<ChatMessageDto> _messages = new();
+    private string _inputMessage = "";
+    private bool _thinking;
+
+    private static readonly string[] _quickChips =
+    {
+        "Room 1", "Room 2", "Room 3",
+        "Active Equipment", "Maintenance", "Retired", "Summary"
+    };
+
+    protected override void OnInitialized()
+    {
+        // Welcome message from bot
+        _messages.Add(new ChatMessageDto
+        {
+            Message = "Hello! I'm your AV Equipment Assistant. You can ask me about equipment in any room. Try typing 'Room 1' or ask about a specific serial number like 'AV-R1-001'!",
+            IsUser = false,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await ScrollToBottomAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey)
+            await SendMessage();
+    }
+
+    private async Task SendQuickChip(string text)
+    {
+        _inputMessage = text;
+        await SendMessage();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_inputMessage) || _thinking) return;
+
+        var userMsg = new ChatMessageDto
+        {
+            Message = _inputMessage,
+            IsUser = true,
+            Timestamp = DateTime.UtcNow
+        };
+        _messages.Add(userMsg);
+
+        var query = _inputMessage;
+        _inputMessage = "";
+        _thinking = true;
+        StateHasChanged();
+
+        try
+        {
+            var (response, error) = await ChatSvc.SendMessageAsync(query);
+            if (response != null)
+            {
+                _messages.Add(new ChatMessageDto
+                {
+                    Message = response.Response,
+                    IsUser = false,
+                    Timestamp = response.Timestamp
+                });
+            }
+            else
+            {
+                _messages.Add(new ChatMessageDto
+                {
+                    Message = $"Sorry, I encountered an error: {error}",
+                    IsUser = false,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessageDto
+            {
+                Message = $"Sorry, something went wrong: {ex.Message}",
+                IsUser = false,
+                Timestamp = DateTime.UtcNow
+            });
+        }
+        finally
+        {
+            _thinking = false;
+        }
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scrollToBottom", "chat-messages");
+        }
+        catch { /* Ignore JS interop errors during pre-render */ }
+    }
+
+    private static string GetMessageStyle(bool isUser) =>
+        isUser
+            ? "background-color:var(--mud-palette-primary);color:var(--mud-palette-primary-text);"
+            : "background-color:var(--mud-palette-surface);";
+}

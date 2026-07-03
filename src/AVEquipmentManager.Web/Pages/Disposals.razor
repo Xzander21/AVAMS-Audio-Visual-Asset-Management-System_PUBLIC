@@ -1,0 +1,307 @@
+@page "/disposals"
+@attribute [Authorize(Roles = "Admin,Supervisor,AVStaff,Staff")]
+@inject DisposalService DisposalSvc
+@inject EquipmentService EquipmentSvc
+@inject IDialogService DialogSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Disposals - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Filled.DeleteSweep" Class="mr-2" /> Disposal Transactions
+</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Each disposal moves through Pending &#x2192; Approved &#x2192; Disposed (or Cancelled). When Disposed,
+    the linked equipment is automatically set to Decommissioned.
+</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <!-- Summary cards -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Info" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@(_summary?.Pending ?? 0)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Pending</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Warning" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@(_summary?.Approved ?? 0)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Approved</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Color="Color.Success" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@(_summary?.Disposed ?? 0)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Disposed</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Default" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@(_summary?.Cancelled ?? 0)</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Cancelled</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudTextField @bind-Value="_search" Label="Search by equipment, reason"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Status" @bind-Value="_filterStatus" Clearable="true">
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                    <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                    <MudSelectItem Value="@("Approved")">Approved</MudSelectItem>
+                    <MudSelectItem Value="@("Disposed")">Disposed</MudSelectItem>
+                    <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Method" @bind-Value="_filterMethod" Clearable="true">
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                    @foreach (DisposalMethod m in Enum.GetValues(typeof(DisposalMethod)))
+                    {
+                        <MudSelectItem T="string" Value="@m.ToString()">@m</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddDialog" FullWidth="true" Style="height:56px;">
+                    + NEW
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Table -->
+    <MudTable Items="@Filtered" Dense="true" Hover="true" Striped="true"
+              Breakpoint="Breakpoint.Sm" SortLabel="Sort by" AllowUnsorted="false">
+        <HeaderContent>
+            <MudTh>#</MudTh>
+            <MudTh>Equipment</MudTh>
+            <MudTh>Reason</MudTh>
+            <MudTh>Method</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="#">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">#@context.Id</MudText>
+            </MudTd>
+            <MudTd DataLabel="Equipment">
+                <MudText Typo="Typo.body2" Style="font-weight:500;">@context.EquipmentName</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @context.EquipmentSerial · @context.EquipmentRoom
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Reason">
+                <MudText Style="max-width:280px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                         Title="@context.Reason">@context.Reason</MudText>
+            </MudTd>
+            <MudTd DataLabel="Method">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.Method</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Created">
+                <MudText Typo="Typo.caption">@context.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                @if (context.Status == DisposalStatus.Pending)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => OpenEditDialog(context))" Title="Edit" />
+                    @* Approve — SUPERVISOR ONLY (separation of duties, 2026-06-15 client directive) *@
+                    <AuthorizeView Roles="Supervisor" Context="approveCtx">
+                        <Authorized>
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Warning"
+                                           OnClick="@(() => ApproveAsync(context))" Title="Approve" />
+                        </Authorized>
+                    </AuthorizeView>
+                }
+                @if (context.Status == DisposalStatus.Approved)
+                {
+                    @* Mark Disposed — SUPERVISOR ONLY (terminal approval gate) *@
+                    <AuthorizeView Roles="Supervisor" Context="disposeCtx">
+                        <Authorized>
+                            <MudIconButton Icon="@Icons.Material.Filled.DeleteForever" Size="Size.Small" Color="Color.Success"
+                                           OnClick="@(() => DisposeAsync(context))" Title="Mark Disposed" />
+                        </Authorized>
+                    </AuthorizeView>
+                }
+                @if (context.Status == DisposalStatus.Pending || context.Status == DisposalStatus.Approved)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Default"
+                                   OnClick="@(() => CancelAsync(context))" Title="Cancel" />
+                }
+                @if (context.Status == DisposalStatus.Cancelled)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteAsync(context))" Title="Delete (Cancelled only)" />
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Color="Color.Secondary" Class="pa-4">No disposal transactions match your filters.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    private List<DisposalDto> _all = new();
+    private List<EquipmentDto> _equipment = new();
+    private DisposalSummaryClientDto? _summary;
+    private bool _loading = true;
+    private string _search = "";
+    private string _filterStatus = "";
+    private string _filterMethod = "";
+
+    private IEnumerable<DisposalDto> Filtered => _all.Where(d =>
+        (string.IsNullOrWhiteSpace(_search) ||
+         d.EquipmentName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+         d.EquipmentSerial.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+         d.Reason.Contains(_search, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterStatus) || d.Status.ToString() == _filterStatus) &&
+        (string.IsNullOrWhiteSpace(_filterMethod) || d.Method.ToString() == _filterMethod));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var t1 = DisposalSvc.GetAllAsync();
+            var t2 = EquipmentSvc.GetAllAsync();
+            var t3 = DisposalSvc.GetSummaryAsync();
+            await Task.WhenAll(t1, t2, t3);
+            _all       = t1.Result;
+            _equipment = t2.Result;
+            _summary   = t3.Result;
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var p = new DialogParameters { ["Disposal"] = null, ["Equipment"] = _equipment };
+        var opts = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var d = await DialogSvc.ShowAsync<DisposalDialog>("New Disposal", p, opts);
+        if (!(await d.Result)!.Canceled) await LoadAsync();
+    }
+
+    private async Task OpenEditDialog(DisposalDto dto)
+    {
+        var p = new DialogParameters { ["Disposal"] = dto, ["Equipment"] = _equipment };
+        var opts = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var d = await DialogSvc.ShowAsync<DisposalDialog>("Edit Disposal", p, opts);
+        if (!(await d.Result)!.Canceled) await LoadAsync();
+    }
+
+    private async Task ApproveAsync(DisposalDto d)
+    {
+        bool? ok = await DialogSvc.ShowMessageBox("Approve disposal?",
+            $"Approve the disposal of '{d.EquipmentName}'?", yesText: "Approve", cancelText: "Cancel");
+        if (ok != true) return;
+        var (data, err) = await DisposalSvc.ApproveAsync(d.Id);
+        if (data != null) { Snackbar.Add("Disposal approved.", Severity.Success); await LoadAsync(); }
+        else Snackbar.Add($"Error: {err}", Severity.Error);
+    }
+
+    private async Task DisposeAsync(DisposalDto d)
+    {
+        // 2026-06-16: replaces the prior plain ShowMessageBox prompt. The new
+        // DisposeWithReplacementDialog asks the Supervisor whether to promote a
+        // Reserved (spare) unit into Active so it inherits the disposed unit's
+        // room — all inside one ACID transaction in DisposalLifecycleService.
+        var parameters = new DialogParameters { ["Disposal"] = d };
+        var dlg = await DialogSvc.ShowAsync<DisposeWithReplacementDialog>(
+            "Mark as Disposed", parameters);
+        var result = await dlg.Result;
+        if (result.Canceled) return;
+
+        // Dialog returns int? — the selected replacement equipment ID or null.
+        var replacementId = result.Data as int?;
+
+        var (data, err) = await DisposalSvc.DisposeAsync(d.Id, replacementId);
+        if (data != null)
+        {
+            var msg = replacementId.HasValue
+                ? $"Disposal completed; equipment decommissioned and replaced by '{data.ReplacementEquipmentName}'."
+                : "Disposal completed; equipment decommissioned.";
+            Snackbar.Add(msg, Severity.Success);
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add($"Error: {err}", Severity.Error);
+        }
+    }
+
+    private async Task CancelAsync(DisposalDto d)
+    {
+        bool? ok = await DialogSvc.ShowMessageBox("Cancel disposal?",
+            $"Cancel the disposal transaction for '{d.EquipmentName}'?", yesText: "Cancel disposal", cancelText: "Keep");
+        if (ok != true) return;
+        var (data, err) = await DisposalSvc.CancelAsync(d.Id);
+        if (data != null) { Snackbar.Add("Disposal cancelled.", Severity.Success); await LoadAsync(); }
+        else Snackbar.Add($"Error: {err}", Severity.Error);
+    }
+
+    private async Task DeleteAsync(DisposalDto d)
+    {
+        bool? ok = await DialogSvc.ShowMessageBox("Delete cancelled disposal?",
+            $"Permanently remove disposal #{d.Id}?", yesText: "Delete", cancelText: "Cancel");
+        if (ok != true) return;
+        var (success, err) = await DisposalSvc.DeleteAsync(d.Id);
+        if (success) { Snackbar.Add("Disposal record deleted.", Severity.Success); await LoadAsync(); }
+        else Snackbar.Add($"Error: {err}", Severity.Error);
+    }
+
+    private static Color StatusColor(DisposalStatus s) => s switch
+    {
+        DisposalStatus.Pending   => Color.Info,
+        DisposalStatus.Approved  => Color.Warning,
+        DisposalStatus.Disposed  => Color.Success,
+        DisposalStatus.Cancelled => Color.Default,
+        _                        => Color.Default
+    };
+}

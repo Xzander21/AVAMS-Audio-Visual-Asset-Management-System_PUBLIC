@@ -1,0 +1,141 @@
+@inject DisposalService DisposalSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Disposal == null ? Icons.Material.Filled.DeleteSweep : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Disposal == null ? "New Disposal Transaction" : "Edit Disposal")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid>
+                @if (Disposal == null)
+                {
+                    <MudItem xs="12">
+                        <MudSelect T="int" Label="Equipment" @bind-Value="_equipmentId"
+                                   Required="true" RequiredError="Equipment is required">
+                            @foreach (var e in Equipment)
+                            {
+                                <MudSelectItem T="int" Value="@e.Id">
+                                    @e.Name (@e.SerialNumber) — @e.RoomName
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+                else
+                {
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            Equipment: <strong>@Disposal.EquipmentName</strong>
+                            (SN: @Disposal.EquipmentSerial · Room: @Disposal.EquipmentRoom)
+                        </MudAlert>
+                    </MudItem>
+                }
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="DisposalMethod" Label="Method" @bind-Value="_method" Required="true">
+                        @foreach (DisposalMethod m in Enum.GetValues(typeof(DisposalMethod)))
+                        {
+                            <MudSelectItem Value="@m">@m</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    @if (Disposal != null)
+                    {
+                        <MudTextField Value="@Disposal.Status.ToString()" Label="Status (read-only)" ReadOnly="true" />
+                    }
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_reason" Label="Reason" Lines="2" Required="true"
+                                  RequiredError="A reason is required" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_notes" Label="Notes (optional)" Lines="3" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Submit" Disabled="@_saving">
+            @if (_saving) { <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" /> }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public DisposalDto? Disposal { get; set; }
+    [Parameter] public List<EquipmentDto> Equipment { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid;
+    private bool _saving;
+
+    private int _equipmentId;
+    private DisposalMethod _method = DisposalMethod.Recycled;
+    private string _reason = "";
+    private string? _notes;
+
+    protected override void OnParametersSet()
+    {
+        if (Disposal != null)
+        {
+            _equipmentId = Disposal.EquipmentId;
+            _method      = Disposal.Method;
+            _reason      = Disposal.Reason;
+            _notes       = Disposal.DisposalNotes;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+        _saving = true;
+        try
+        {
+            if (Disposal == null)
+            {
+                var dto = new CreateDisposalDto
+                {
+                    EquipmentId   = _equipmentId,
+                    Reason        = _reason,
+                    Method        = _method,
+                    DisposalNotes = _notes
+                };
+                var (data, error) = await DisposalSvc.CreateAsync(dto);
+                if (data != null)
+                {
+                    Snackbar.Add($"Disposal transaction created (#{data.Id}).", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else Snackbar.Add($"Error: {error}", Severity.Error);
+            }
+            else
+            {
+                var dto = new UpdateDisposalDto
+                {
+                    Reason        = _reason,
+                    Method        = _method,
+                    Status        = Disposal.Status,
+                    DisposalNotes = _notes
+                };
+                var (data, error) = await DisposalSvc.UpdateAsync(Disposal.Id, dto);
+                if (data != null)
+                {
+                    Snackbar.Add("Disposal updated.", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else Snackbar.Add($"Error: {error}", Severity.Error);
+            }
+        }
+        finally { _saving = false; }
+    }
+}

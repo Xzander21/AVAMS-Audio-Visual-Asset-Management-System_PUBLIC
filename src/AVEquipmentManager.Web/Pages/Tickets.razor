@@ -1,0 +1,327 @@
+@page "/tickets"
+@attribute [Authorize]
+@inject TicketService TicketSvc
+@inject EquipmentService EquipmentSvc
+@inject IDialogService DialogSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Maintenance Records - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Build" Class="mr-2" /> Maintenance Records
+</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    In-system maintenance, repair, and inspection transactions linked to specific equipment items.
+    Each record moves from Open &#x2192; In Progress &#x2192; Resolved or Closed.
+</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <!-- Summary Cards -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Color="Color.Default" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@_summary.Total</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.FiberNew" Color="Color.Info" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@_summary.Open</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Open</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Engineering" Color="Color.Warning" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@_summary.InProgress</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">In Progress</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@_summary.Resolved</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Resolved</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Default" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4">@_summary.Closed</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Closed</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudPaper Class="pa-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-error);">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Color="Color.Error" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h4" Color="Color.Error">@_summary.Critical</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Critical Open</MudText>
+                    </div>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Filters & Search -->
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="12" md="4">
+                <MudTextField @bind-Value="_searchText" Label="Search by title or equipment"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="4" md="2">
+                <MudSelect T="string" Label="Status" @bind-Value="_filterStatus" Clearable="true" ShrinkLabel="true">
+                    <MudSelectItem Value="@("")">All Statuses</MudSelectItem>
+                    <MudSelectItem Value="@("Open")">Open</MudSelectItem>
+                    <MudSelectItem Value="@("InProgress")">In Progress</MudSelectItem>
+                    <MudSelectItem Value="@("Resolved")">Resolved</MudSelectItem>
+                    <MudSelectItem Value="@("Closed")">Closed</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4" md="2">
+                <MudSelect T="string" Label="Priority" @bind-Value="_filterPriority" Clearable="true" ShrinkLabel="true">
+                    <MudSelectItem Value="@("")">All Priorities</MudSelectItem>
+                    <MudSelectItem Value="@("Low")">Low</MudSelectItem>
+                    <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
+                    <MudSelectItem Value="@("High")">High</MudSelectItem>
+                    <MudSelectItem Value="@("Critical")">Critical</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4" md="2">
+                <MudSelect T="string" Label="Type" @bind-Value="_filterType" Clearable="true" ShrinkLabel="true">
+                    <MudSelectItem Value="@("")">All Types</MudSelectItem>
+                    <MudSelectItem Value="@("Maintenance")">Maintenance</MudSelectItem>
+                    <MudSelectItem Value="@("Repair")">Repair</MudSelectItem>
+                    <MudSelectItem Value="@("Inspection")">Inspection</MudSelectItem>
+                    <MudSelectItem Value="@("Replacement")">Replacement</MudSelectItem>
+                    <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <!-- All authenticated roles can create a ticket -->
+            <MudItem xs="12" sm="12" md="2" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddDialog" FullWidth="true" Style="height:56px;">
+                    + NEW TICKET
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Tickets Table -->
+    <MudTable Items="@FilteredTickets" Dense="true" Hover="true"
+              Breakpoint="Breakpoint.Sm" Striped="true"
+              SortLabel="Sort by" AllowUnsorted="false">
+        <HeaderContent>
+            <MudTh>#</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TicketDto, object>(x => x.Title)">Title</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TicketDto, object>(x => x.EquipmentName)">Equipment</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TicketDto, object>(x => x.Type.ToString())">Type</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TicketDto, object>(x => (int)x.Priority)">Priority</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TicketDto, object>(x => (int)x.Status)">Status</MudTableSortLabel></MudTh>
+            <MudTh>Assigned To</MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<TicketDto, object>(x => x.CreatedAt)">Created</MudTableSortLabel></MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="#">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">#@context.Id</MudText>
+            </MudTd>
+            <MudTd DataLabel="Title">
+                <MudText Style="max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                         Title="@context.Title">
+                    @context.Title
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Equipment">
+                <div>
+                    <MudText Typo="Typo.body2">@context.EquipmentName</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@context.EquipmentRoom</MudText>
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                    @context.Type
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Priority">
+                <MudChip T="string" Size="Size.Small" Color="@GetPriorityColor(context.Priority)">
+                    @context.Priority
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                    @GetStatusLabel(context.Status)
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Assigned To">
+                @if (string.IsNullOrWhiteSpace(context.AssignedTo))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Unassigned</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">@context.AssignedTo</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Created">
+                <MudText Typo="Typo.caption">@context.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <!-- Edit: Admin and Staff only -->
+                <AuthorizeView Roles="Admin,Staff" Context="editCtx">
+                    <Authorized>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => OpenEditDialog(context))" Title="Edit" />
+                    </Authorized>
+                </AuthorizeView>
+                <!-- Delete: Admin only -->
+                <AuthorizeView Roles="Admin" Context="deleteCtx">
+                    <Authorized>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => OpenDeleteDialog(context))" Title="Delete" />
+                    </Authorized>
+                </AuthorizeView>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Color="Color.Secondary" Class="pa-4">No tickets match your filters.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    private List<TicketDto> _allTickets = new();
+    private List<EquipmentDto> _allEquipment = new();
+    private TicketSummaryDto _summary = new();
+    private bool _loading = true;
+
+    private string _searchText   = "";
+    private string _filterStatus   = "";
+    private string _filterPriority = "";
+    private string _filterType     = "";
+
+    private IEnumerable<TicketDto> FilteredTickets => _allTickets.Where(t =>
+        (string.IsNullOrWhiteSpace(_searchText) ||
+         t.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+         t.EquipmentName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+         t.EquipmentRoom.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterStatus)   || t.Status.ToString()   == _filterStatus) &&
+        (string.IsNullOrWhiteSpace(_filterPriority) || t.Priority.ToString() == _filterPriority) &&
+        (string.IsNullOrWhiteSpace(_filterType)     || t.Type.ToString()     == _filterType));
+
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            var ticketsTask   = TicketSvc.GetAllAsync();
+            var equipTask     = EquipmentSvc.GetAllAsync();
+            var summaryTask   = TicketSvc.GetSummaryAsync();
+
+            await Task.WhenAll(ticketsTask, equipTask, summaryTask);
+
+            _allTickets    = ticketsTask.Result;
+            _allEquipment  = equipTask.Result;
+            _summary       = summaryTask.Result ?? new TicketSummaryDto();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Ticket"]    = null,
+            ["Equipment"] = _allEquipment
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogSvc.ShowAsync<TicketDialog>("New Ticket", parameters, options);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadDataAsync();
+    }
+
+    private async Task OpenEditDialog(TicketDto ticket)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Ticket"]    = ticket,
+            ["Equipment"] = _allEquipment
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await DialogSvc.ShowAsync<TicketDialog>("Edit Ticket", parameters, options);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadDataAsync();
+    }
+
+    private async Task OpenDeleteDialog(TicketDto ticket)
+    {
+        var parameters = new DialogParameters { ["Ticket"] = ticket };
+        var dialog = await DialogSvc.ShowAsync<DeleteTicketDialog>("Delete Ticket", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadDataAsync();
+    }
+
+    private static Color GetStatusColor(TicketStatus status) => status switch
+    {
+        TicketStatus.Open       => Color.Info,
+        TicketStatus.InProgress => Color.Warning,
+        TicketStatus.Resolved   => Color.Success,
+        TicketStatus.Closed     => Color.Default,
+        _                       => Color.Default
+    };
+
+    private static string GetStatusLabel(TicketStatus status) => status switch
+    {
+        TicketStatus.InProgress => "In Progress",
+        _ => status.ToString()
+    };
+
+    private static Color GetPriorityColor(TicketPriority priority) => priority switch
+    {
+        TicketPriority.Low      => Color.Default,
+        TicketPriority.Medium   => Color.Primary,
+        TicketPriority.High     => Color.Warning,
+        TicketPriority.Critical => Color.Error,
+        _                       => Color.Default
+    };
+}

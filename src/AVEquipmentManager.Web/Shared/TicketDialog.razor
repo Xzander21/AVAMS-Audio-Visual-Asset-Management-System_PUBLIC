@@ -1,0 +1,265 @@
+@using AVEquipmentManager.Shared.DTOs
+@using AVEquipmentManager.Shared.Enums
+@inject TicketService TicketSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.ConfirmationNumber" Class="mr-2" />
+            @(Ticket == null ? "New Ticket" : "Edit Ticket")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid Spacing="3">
+
+                <!-- Title -->
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_model.Title"
+                                  Label="Title *"
+                                  Required="true"
+                                  RequiredError="Title is required"
+                                  MaxLength="300"
+                                  Counter="300"
+                                  Immediate="true" />
+                </MudItem>
+
+                <!-- Equipment -->
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="int" Label="Equipment *" @bind-Value="_model.EquipmentId"
+                               Required="true" RequiredError="Please select equipment">
+                        <MudSelectItem T="int" Value="0" Disabled="true">— Select equipment —</MudSelectItem>
+                        @foreach (var eq in Equipment)
+                        {
+                            <MudSelectItem T="int" Value="@eq.Id">@eq.Name (@eq.RoomName)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <!-- Type — Students only see Request, Malfunction, Other -->
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="TicketType" Label="Type" @bind-Value="_model.Type">
+                        @foreach (TicketType t in Enum.GetValues<TicketType>())
+                        {
+                            @if (!_isStudent || StudentAllowedTypes.Contains(t))
+                            {
+                                <MudSelectItem T="TicketType" Value="@t">@t</MudSelectItem>
+                            }
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <!-- Priority -->
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="TicketPriority" Label="Priority" @bind-Value="_model.Priority">
+                        @foreach (TicketPriority p in Enum.GetValues<TicketPriority>())
+                        {
+                            <MudSelectItem T="TicketPriority" Value="@p">@p</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <!-- Status (edit only) -->
+                @if (Ticket != null)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="TicketStatus" Label="Status" @bind-Value="_updateModel!.Status">
+                            @foreach (TicketStatus s in Enum.GetValues<TicketStatus>())
+                            {
+                                <MudSelectItem T="TicketStatus" Value="@s">@s</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+
+                <!-- Reported By -->
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.ReportedBy"
+                                  Label="Reported By"
+                                  MaxLength="200"
+                                  Immediate="true"
+                                  ReadOnly="@_isStudent" />
+                </MudItem>
+
+                <!-- Assigned To — hidden for Students -->
+                @if (!_isStudent)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="string" Label="Assigned To" @bind-Value="_model.AssignedTo"
+                                   Clearable="true">
+                            <MudSelectItem T="string" Value="@("")">— Unassigned —</MudSelectItem>
+                            @foreach (var person in _assignees)
+                            {
+                                <MudSelectItem T="string" Value="@person">@person</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+
+                <!-- External Ticket ID (bridge to the existing institutional service desk) -->
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_model.ExternalTicketId"
+                                  Label="External Ticket ID (e.g., FreshService #12345)"
+                                  HelperText="Optional. Reference the IT Specialist's ticket in the existing service desk if this defect was escalated from there."
+                                  MaxLength="100" />
+                </MudItem>
+
+                <!-- Description -->
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_model.Description"
+                                  Label="Description"
+                                  Lines="3"
+                                  MaxLength="2000"
+                                  Counter="2000"
+                                  Immediate="true" />
+                </MudItem>
+
+                <!-- Resolution (edit only, when status is Resolved/Closed) -->
+                @if (Ticket != null && (_updateModel!.Status == TicketStatus.Resolved || _updateModel!.Status == TicketStatus.Closed))
+                {
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_updateModel!.Resolution"
+                                      Label="Resolution / Notes"
+                                      Lines="3"
+                                      MaxLength="2000"
+                                      Counter="2000"
+                                      Immediate="true" />
+                    </MudItem>
+                }
+
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="Submit" Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(Ticket == null ? "Create Ticket" : "Save Changes")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = null!;
+
+    [Parameter] public TicketDto? Ticket { get; set; }
+    [Parameter] public List<EquipmentDto> Equipment { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid;
+    private bool _saving;
+    private bool _isStudent;
+    private string _currentUsername = string.Empty;
+
+    // Ticket types available to Students
+    private static readonly HashSet<TicketType> StudentAllowedTypes = new()
+    {
+        TicketType.Request,
+        TicketType.Malfunction,
+        TicketType.Other
+    };
+
+    // Shared fields for both create and update
+    private CreateTicketDto _model = new();
+    private UpdateTicketDto? _updateModel;
+
+    private readonly List<string> _assignees = new()
+    {
+        "John Smith", "Maria Santos", "Carlos Rivera",
+        "Ana Reyes", "Mark Dela Cruz", "Jenny Lopez"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Resolve role before building the model
+        var state = await AuthStateTask;
+        _isStudent       = state.User.IsInRole("Student");
+        _currentUsername = state.User.Identity?.Name ?? string.Empty;
+
+        if (Ticket != null)
+        {
+            // Edit mode — populate both models
+            _model = new CreateTicketDto
+            {
+                Title            = Ticket.Title,
+                Description      = Ticket.Description,
+                EquipmentId      = Ticket.EquipmentId,
+                Type             = Ticket.Type,
+                Priority         = Ticket.Priority,
+                ReportedBy       = Ticket.ReportedBy,
+                AssignedTo       = Ticket.AssignedTo,
+                ExternalTicketId = Ticket.ExternalTicketId
+            };
+            _updateModel = new UpdateTicketDto
+            {
+                Title            = Ticket.Title,
+                Description      = Ticket.Description,
+                EquipmentId      = Ticket.EquipmentId,
+                Type             = Ticket.Type,
+                Priority         = Ticket.Priority,
+                Status           = Ticket.Status,
+                ReportedBy       = Ticket.ReportedBy,
+                AssignedTo       = Ticket.AssignedTo,
+                Resolution       = Ticket.Resolution,
+                ExternalTicketId = Ticket.ExternalTicketId
+            };
+        }
+        else
+        {
+            _model = new CreateTicketDto();
+
+            // Students get their username pre-filled and a student-appropriate default type
+            if (_isStudent)
+            {
+                _model.ReportedBy = _currentUsername;
+                _model.Type       = TicketType.Request;
+            }
+        }
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _saving = true;
+        try
+        {
+            if (Ticket == null)
+            {
+                var (data, error) = await TicketSvc.CreateAsync(_model);
+                if (error != null) { Snackbar.Add($"Error: {error}", Severity.Error); return; }
+                Snackbar.Add("Ticket created!", Severity.Success);
+            }
+            else
+            {
+                // Sync shared fields into update model
+                _updateModel!.Title            = _model.Title;
+                _updateModel.Description       = _model.Description;
+                _updateModel.EquipmentId       = _model.EquipmentId;
+                _updateModel.Type              = _model.Type;
+                _updateModel.Priority          = _model.Priority;
+                _updateModel.ReportedBy        = _model.ReportedBy;
+                _updateModel.AssignedTo        = _model.AssignedTo;
+                _updateModel.ExternalTicketId  = _model.ExternalTicketId;
+
+                var (data, error) = await TicketSvc.UpdateAsync(Ticket.Id, _updateModel);
+                if (error != null) { Snackbar.Add($"Error: {error}", Severity.Error); return; }
+                Snackbar.Add("Ticket updated!", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

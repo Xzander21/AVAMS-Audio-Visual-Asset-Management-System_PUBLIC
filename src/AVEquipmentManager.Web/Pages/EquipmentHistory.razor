@@ -1,0 +1,296 @@
+@page "/equipment/{Id:int}/history"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject TicketService TicketSvc
+@inject DisposalService DisposalSvc
+@inject AcquisitionService AcquisitionSvc
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Equipment History - AVAMS</PageTitle>
+
+<div class="no-print" style="margin-bottom:16px;">
+    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+               OnClick="@(() => Nav.NavigateTo("/equipment"))" Class="mr-2">
+        Back to Equipment
+    </MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Print"
+               OnClick="PrintAsync">
+        Print / Save as PDF
+    </MudButton>
+</div>
+
+<style>
+    @@media print {
+        .no-print, .mud-appbar, .mud-drawer, .mud-popover-provider, .mud-snackbar-provider { display: none !important; }
+        .mud-main-content { padding: 0 !important; margin-top: 0 !important; }
+        a { color: inherit; text-decoration: none; }
+        body { background: white !important; }
+    }
+    .timeline { border-left: 3px solid #2E7D32; padding-left: 20px; margin-left: 8px; }
+    .timeline-event {
+        position: relative; padding: 12px 16px; margin-bottom: 16px;
+        background: #FAFAFA; border-radius: 6px; border-left: 4px solid #ccc;
+    }
+    .timeline-event::before {
+        content: ""; position: absolute; left: -28px; top: 18px;
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #2E7D32; border: 3px solid white; box-shadow: 0 0 0 2px #2E7D32;
+    }
+    .timeline-event.maint { border-left-color: #F9A825; }
+    .timeline-event.maint::before { background: #F9A825; box-shadow: 0 0 0 2px #F9A825; }
+    .timeline-event.dispose { border-left-color: #C62828; }
+    .timeline-event.dispose::before { background: #C62828; box-shadow: 0 0 0 2px #C62828; }
+    .timeline-event.acquire { border-left-color: #2E7D32; }
+    .timeline-event.acquire::before { background: #2E7D32; }
+</style>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_equipment == null)
+{
+    <MudAlert Severity="Severity.Error">Equipment not found.</MudAlert>
+}
+else
+{
+    <!-- Header card -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2" Style="border-left:4px solid #2E7D32;">
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudText Typo="Typo.h4" Style="color:#1B5E20;">@_equipment.Name</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @_equipment.Category · Serial @_equipment.SerialNumber · Room @_equipment.RoomName
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    Installed @_equipment.DateInstalled.ToString("MMM d, yyyy") ·
+                    Expected life: @_equipment.ExpectedLifeInYears years ·
+                    Status: <MudChip T="string" Size="Size.Small" Color="@StatusColor(_equipment.Status)">@_equipment.Status</MudChip>
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-3" Elevation="0" Outlined="true">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Quick Stats</MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>@_tickets.Count</strong> maintenance event(s)
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>@_tickets.Count(t => t.Status == TicketStatus.Open || t.Status == TicketStatus.InProgress)</strong> open
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>@(_resolvedDays.HasValue ? _resolvedDays.Value.ToString("N1") + " days" : "—")</strong> avg time-to-resolve
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        Remaining life: <strong>@Remaining()</strong>
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-2" />
+        Lifecycle Timeline
+    </MudText>
+
+    @if (_events.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">No lifecycle events recorded for this equipment yet.</MudAlert>
+    }
+    else
+    {
+        <div class="timeline">
+            @foreach (var e in _events)
+            {
+                <div class="timeline-event @(e.Kind)">
+                    <MudStack Row Spacing="2" AlignItems="AlignItems.Center" Class="mb-1">
+                        <MudIcon Icon="@e.Icon" Style="@($"color:{e.Color};")" Size="Size.Small" />
+                        <MudText Typo="Typo.body1" Style="font-weight:600;">@e.Title</MudText>
+                        <MudSpacer />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @e.When.ToLocalTime().ToString("MMM d, yyyy · HH:mm")
+                        </MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@e.Detail</MudText>
+                    @if (!string.IsNullOrEmpty(e.Extra))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Default" Class="mt-1">@e.Extra</MudText>
+                    }
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private EquipmentDto? _equipment;
+    private List<TicketDto> _tickets = new();
+    private List<DisposalDto> _disposals = new();
+    private List<AcquisitionDto> _acquisitions = new();
+    private List<TimelineEvent> _events = new();
+    private double? _resolvedDays;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            _equipment = await EquipmentSvc.GetByIdAsync(Id);
+            if (_equipment == null) { _loading = false; return; }
+
+            // Pull related transactions
+            var ts = TicketSvc.GetAllAsync();
+            var ds = DisposalSvc.GetAllAsync();
+            var aq = AcquisitionSvc.GetAllAsync();
+            await Task.WhenAll(ts, ds, aq);
+
+            _tickets      = ts.Result.Where(t => t.EquipmentId == Id).ToList();
+            _disposals    = ds.Result.Where(d => d.EquipmentId == Id).ToList();
+            _acquisitions = aq.Result.Where(a => a.DeployedEquipmentId == Id).ToList();
+
+            // Avg time-to-resolve in days for resolved tickets
+            var resolved = _tickets.Where(t => t.ResolvedAt.HasValue).ToList();
+            _resolvedDays = resolved.Count > 0
+                ? resolved.Average(t => (t.ResolvedAt!.Value - t.CreatedAt).TotalDays)
+                : null;
+
+            BuildTimeline();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private void BuildTimeline()
+    {
+        var list = new List<TimelineEvent>();
+
+        // Acquisition / Deploy events
+        foreach (var a in _acquisitions)
+        {
+            if (a.DeployedAt.HasValue)
+            {
+                list.Add(new TimelineEvent
+                {
+                    Kind  = "acquire",
+                    When  = a.DeployedAt.Value,
+                    Title = $"Deployed (Acquisition #{a.Id})",
+                    Detail = $"Equipment placed in service. Vendor: {a.Vendor ?? "—"}. PO: {a.PurchaseOrderNumber ?? "—"}.",
+                    Extra = a.UnitCost.HasValue ? $"Unit cost: ₱{a.UnitCost:N2} · Qty {a.Quantity}" : null,
+                    Icon  = Icons.Material.Filled.AddShoppingCart,
+                    Color = "#2E7D32"
+                });
+            }
+        }
+
+        // Equipment creation event (fallback if no Acquisition link)
+        if (!list.Any(e => e.Kind == "acquire"))
+        {
+            list.Add(new TimelineEvent
+            {
+                Kind  = "acquire",
+                When  = _equipment!.CreatedAt,
+                Title = "Registered in AVAMS",
+                Detail = $"Equipment record created. Installed {_equipment.DateInstalled:MMM d, yyyy}.",
+                Icon  = Icons.Material.Filled.AddCircle,
+                Color = "#2E7D32"
+            });
+        }
+
+        // Maintenance events
+        foreach (var t in _tickets)
+        {
+            var ext = !string.IsNullOrEmpty(t.ExternalTicketId)
+                ? $" · External ticket: {t.ExternalTicketId}"
+                : "";
+            list.Add(new TimelineEvent
+            {
+                Kind  = "maint",
+                When  = t.CreatedAt,
+                Title = $"Maintenance opened: {t.Title} (#{t.Id})",
+                Detail = $"Type: {t.Type} · Priority: {t.Priority} · Reported by: {t.ReportedBy ?? "—"}{ext}",
+                Extra = string.IsNullOrEmpty(t.Description) ? null : t.Description,
+                Icon  = Icons.Material.Filled.Build,
+                Color = "#F9A825"
+            });
+            if (t.ResolvedAt.HasValue)
+            {
+                list.Add(new TimelineEvent
+                {
+                    Kind  = "maint",
+                    When  = t.ResolvedAt.Value,
+                    Title = $"Maintenance resolved (#{t.Id})",
+                    Detail = $"Status: {t.Status} · Assigned to: {t.AssignedTo ?? "—"}",
+                    Extra = string.IsNullOrEmpty(t.Resolution) ? null : $"Resolution: {t.Resolution}",
+                    Icon  = Icons.Material.Filled.TaskAlt,
+                    Color = "#2E7D32"
+                });
+            }
+        }
+
+        // Disposal events
+        foreach (var d in _disposals)
+        {
+            list.Add(new TimelineEvent
+            {
+                Kind  = "dispose",
+                When  = d.CreatedAt,
+                Title = $"Disposal initiated (#{d.Id})",
+                Detail = $"Reason: {d.Reason} · Method: {d.Method} · By: {d.RequestedBy ?? "—"}",
+                Icon  = Icons.Material.Filled.DeleteOutline,
+                Color = "#F9A825"
+            });
+            if (d.DisposedAt.HasValue)
+            {
+                list.Add(new TimelineEvent
+                {
+                    Kind  = "dispose",
+                    When  = d.DisposedAt.Value,
+                    Title = $"Equipment disposed (#{d.Id})",
+                    Detail = $"Method: {d.Method} · Status set to Decommissioned",
+                    Extra = string.IsNullOrEmpty(d.DisposalNotes) ? null : d.DisposalNotes,
+                    Icon  = Icons.Material.Filled.DeleteForever,
+                    Color = "#C62828"
+                });
+            }
+        }
+
+        _events = list.OrderByDescending(e => e.When).ToList();
+    }
+
+    private string Remaining()
+    {
+        var end = _equipment!.DateInstalled.AddYears(_equipment.ExpectedLifeInYears);
+        var rem = end - DateTime.UtcNow;
+        if (rem.TotalDays <= 0) return "Expired";
+        int y = (int)(rem.TotalDays / 365);
+        int m = (int)((rem.TotalDays % 365) / 30);
+        return $"{y}y {m}m";
+    }
+
+    private static Color StatusColor(EquipmentStatus s) => s switch
+    {
+        EquipmentStatus.Active           => Color.Success,
+        EquipmentStatus.UnderMaintenance => Color.Warning,
+        EquipmentStatus.Retired          => Color.Error,
+        EquipmentStatus.Decommissioned   => Color.Default,
+        _                                => Color.Default
+    };
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("window.print");
+
+    private class TimelineEvent
+    {
+        public string Kind  { get; set; } = "";
+        public DateTime When { get; set; }
+        public string Title { get; set; } = "";
+        public string Detail { get; set; } = "";
+        public string? Extra { get; set; }
+        public string Icon  { get; set; } = "";
+        public string Color { get; set; } = "#2E7D32";
+    }
+}

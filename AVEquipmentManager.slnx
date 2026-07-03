@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AVEquipmentManager.API/AVEquipmentManager.API.csproj" />
+    <Project Path="src/AVEquipmentManager.Shared/AVEquipmentManager.Shared.csproj" />
+    <Project Path="src/AVEquipmentManager.Web/AVEquipmentManager.Web.csproj" />
+  </Folder>
+</Solution>

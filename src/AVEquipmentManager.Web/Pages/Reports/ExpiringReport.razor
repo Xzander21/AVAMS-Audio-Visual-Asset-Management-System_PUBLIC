@@ -1,0 +1,121 @@
+@page "/reports/expiring"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Expiring Equipment Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Expiring Equipment Report"
+              Subtitle="Equipment that has expired or will expire within the next 6 months — candidates for maintenance or replacement.">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="6"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#C62828;">@_expired.Count</MudText>
+                <MudText Typo="Typo.caption">Expired</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="6"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#F9A825;">@_expiring.Count</MudText>
+                <MudText Typo="Typo.caption">Expiring &lt; 6 months</MudText>
+            </MudPaper></MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#C62828;">Expired (@_expired.Count)</MudText>
+        @if (_expired.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">No expired equipment.</MudText>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:24px;">
+                <thead>
+                    <tr style="background:#FFEBEE; color:#B71C1C;">
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Name</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Serial</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Room</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Installed</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Expected End-of-Life</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in _expired.OrderBy(x => x.RoomName).ThenBy(x => x.Name))
+                    {
+                        var end = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+                        <tr>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.Name</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.SerialNumber</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.RoomName</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.DateInstalled.ToString("yyyy-MM-dd")</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@end.ToString("yyyy-MM-dd")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <MudText Typo="Typo.h6" Class="mb-2" Style="color:#F9A825;">Expiring within 6 months (@_expiring.Count)</MudText>
+        @if (_expiring.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">No equipment expiring soon.</MudText>
+        }
+        else
+        {
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                <thead>
+                    <tr style="background:#FFF8E1; color:#E65100;">
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Name</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Serial</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Room</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Installed</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Expires</th>
+                        <th style="border:1px solid #ccc; padding:6px; text-align:left;">Days Left</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var e in _expiring.OrderBy(x => x.DateInstalled.AddYears(x.ExpectedLifeInYears)))
+                    {
+                        var end = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+                        var days = (int)(end - DateTime.UtcNow).TotalDays;
+                        <tr>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.Name</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.SerialNumber</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.RoomName</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@e.DateInstalled.ToString("yyyy-MM-dd")</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@end.ToString("yyyy-MM-dd")</td>
+                            <td style="border:1px solid #ccc; padding:6px;">@days</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</ReportHeader>
+
+@code {
+    private List<EquipmentDto> _all = new();
+    private List<EquipmentDto> _expired = new();
+    private List<EquipmentDto> _expiring = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _all = await EquipmentSvc.GetAllAsync();
+            _expired = _all.Where(e =>
+                e.Status != EquipmentStatus.Retired && e.Status != EquipmentStatus.Decommissioned &&
+                (e.DateInstalled.AddYears(e.ExpectedLifeInYears) - DateTime.UtcNow).TotalDays <= 0).ToList();
+            _expiring = _all.Where(e =>
+            {
+                var d = (e.DateInstalled.AddYears(e.ExpectedLifeInYears) - DateTime.UtcNow).TotalDays;
+                return e.Status == EquipmentStatus.Active && d > 0 && d <= 180;
+            }).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

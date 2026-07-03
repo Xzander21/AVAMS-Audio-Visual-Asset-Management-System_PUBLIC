@@ -1,0 +1,159 @@
+@page "/staff"
+@attribute [Authorize(Roles = "Admin,AVStaff,Staff")]
+@inject StaffService StaffSvc
+@inject EquipmentService EquipmentSvc
+@inject IDialogService DialogSvc
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Staff - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Staff (Teachers)</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <!-- Filters & Search -->
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="5">
+                <MudTextField @bind-Value="_searchText" Label="Search by name or employee ID"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string" Label="Filter by Room" @bind-Value="_filterRoom" Clearable="true">
+                    <MudSelectItem Value="@("")">All Rooms</MudSelectItem>
+                    @foreach (var r in _rooms)
+                    {
+                        <MudSelectItem T="string" Value="@r">@r</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="string" Label="Department" @bind-Value="_filterDept" Clearable="true">
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                    @foreach (var d in _departments)
+                    {
+                        <MudSelectItem T="string" Value="@d">@d</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="@OpenAddDialog" FullWidth="true" Style="height:56px;">
+                    + ADD STAFF
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudTable Items="@FilteredStaff" Dense="true" Hover="true" Striped="true"
+              Breakpoint="Breakpoint.Sm" SortLabel="Sort by" AllowUnsorted="false">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<StaffDto, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<StaffDto, object>(x => x.EmployeeId)">Employee ID</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<StaffDto, object>(x => x.RoomNumber)">Room</MudTableSortLabel></MudTh>
+            <MudTh>Department</MudTh>
+            <MudTh>Contact</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name"><MudText Style="font-weight:500;">@context.Name</MudText></MudTd>
+            <MudTd DataLabel="Employee ID">@context.EmployeeId</MudTd>
+            <MudTd DataLabel="Room">
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                    @context.RoomNumber
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Department">@(context.Department ?? "—")</MudTd>
+            <MudTd DataLabel="Contact">
+                <MudText Typo="Typo.caption">@(context.Email ?? "")</MudText><br />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@(context.Phone ?? "")</MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Filled.MyLocation" Size="Size.Small" Color="Color.Secondary"
+                               OnClick="@(() => TrackStaff(context.Id))" Title="Track equipment" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" Title="Edit" />
+                <MudIconButton Icon="@Icons.Material.Filled.Archive" Size="Size.Small" Color="Color.Warning"
+                               OnClick="@(() => DeleteStaff(context))" Title="Archive (recoverable)" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Color="Color.Secondary" Class="pa-4">No staff records match your filters.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    private List<StaffDto> _staff = new();
+    private List<string>   _rooms = new();
+    private List<string>   _departments = new();
+    private bool _loading = true;
+    private string _searchText = "";
+    private string _filterRoom = "";
+    private string _filterDept = "";
+
+    private IEnumerable<StaffDto> FilteredStaff => _staff.Where(s =>
+        (string.IsNullOrWhiteSpace(_searchText) ||
+         s.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+         s.EmployeeId.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterRoom) || s.RoomNumber == _filterRoom) &&
+        (string.IsNullOrWhiteSpace(_filterDept) || (s.Department ?? "") == _filterDept));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _staff       = await StaffSvc.GetAllAsync();
+            _rooms       = await EquipmentSvc.GetRoomsAsync();
+            _departments = await StaffSvc.GetDepartmentsAsync();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private void TrackStaff(int id) => Nav.NavigateTo($"/track/{id}");
+
+    private async Task OpenAddDialog()
+    {
+        var p = new DialogParameters { ["Staff"] = null, ["Rooms"] = _rooms };
+        var d = await DialogSvc.ShowAsync<StaffDialog>("Add Staff", p);
+        if (!(await d.Result)!.Canceled) await LoadAsync();
+    }
+
+    private async Task OpenEditDialog(StaffDto s)
+    {
+        var p = new DialogParameters { ["Staff"] = s, ["Rooms"] = _rooms };
+        var d = await DialogSvc.ShowAsync<StaffDialog>("Edit Staff", p);
+        if (!(await d.Result)!.Canceled) await LoadAsync();
+    }
+
+    private async Task DeleteStaff(StaffDto s)
+    {
+        // Finding #7 / CWE-79 patch (2026-06-16): Staff.Name and EmployeeId are
+        // user-supplied. Use the plain-text overload of ShowMessageBox so the
+        // dialog renderer HTML-encodes them automatically.
+        bool? ok = await DialogSvc.ShowMessageBox(
+            "Archive staff record",
+            $"Move '{s.Name}' (Employee ID: {s.EmployeeId}) to the archive? " +
+            "You can restore it any time from the Archive page.",
+            yesText: "Archive", cancelText: "Cancel");
+        if (ok != true) return;
+
+        var (success, error) = await StaffSvc.DeleteAsync(s.Id);
+        if (success) { _staff.Remove(s); Snackbar.Add($"'{s.Name}' moved to archive.", Severity.Success); }
+        else Snackbar.Add($"Error: {error}", Severity.Error);
+    }
+}

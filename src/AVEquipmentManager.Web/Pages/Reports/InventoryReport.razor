@@ -1,0 +1,87 @@
+@page "/reports/inventory"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Inventory Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Equipment Inventory Report"
+              Subtitle="@($"Total active equipment: {_items.Count}")">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <!-- Summary panel -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5">@_items.Count</MudText>
+                <MudText Typo="Typo.caption">Total</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#2E7D32;">@_items.Count(e => e.Status == EquipmentStatus.Active)</MudText>
+                <MudText Typo="Typo.caption">Active</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#F9A825;">@_items.Count(e => e.Status == EquipmentStatus.UnderMaintenance)</MudText>
+                <MudText Typo="Typo.caption">Under Maintenance</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="3"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#C62828;">@_items.Count(e => e.Status == EquipmentStatus.Retired || e.Status == EquipmentStatus.Decommissioned)</MudText>
+                <MudText Typo="Typo.caption">Retired / Decommissioned</MudText>
+            </MudPaper></MudItem>
+        </MudGrid>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead>
+                <tr style="background:#E8F5E9; color:#1B5E20;">
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Name</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Serial Number</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Room</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Installed</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Exp. Life (yrs)</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Remaining</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in _items.OrderBy(x => x.RoomName).ThenBy(x => x.Name))
+                {
+                    var rem = Remaining(e);
+                    <tr>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.Name</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.SerialNumber</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.RoomName</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.DateInstalled.ToString("yyyy-MM-dd")</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.ExpectedLifeInYears</td>
+                        <td style="border:1px solid #ccc; padding:6px; color:@(rem.IsExpired ? "#C62828" : "#000");">@rem.Display</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@e.Status</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</ReportHeader>
+
+@code {
+    private List<EquipmentDto> _items = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _items = await EquipmentSvc.GetAllAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private static (string Display, bool IsExpired) Remaining(EquipmentDto e)
+    {
+        var end = e.DateInstalled.AddYears(e.ExpectedLifeInYears);
+        var rem = end - DateTime.UtcNow;
+        if (rem.TotalDays <= 0) return ("Expired", true);
+        int y = (int)(rem.TotalDays / 365);
+        int m = (int)((rem.TotalDays % 365) / 30);
+        return ($"{y}y {m}m", false);
+    }
+}

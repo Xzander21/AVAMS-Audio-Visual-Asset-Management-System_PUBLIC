@@ -1,0 +1,63 @@
+@page "/reports"
+@attribute [Authorize]
+@inject NavigationManager Nav
+
+<PageTitle>Reports - AVAMS</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-2">
+    <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" /> Reports
+</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Select a report to generate a print-friendly view. Use the Print button on the report page to save as PDF.
+</MudText>
+
+<MudGrid>
+    @foreach (var r in _reports)
+    {
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Class="pa-5" Elevation="2" @onclick="@(() => Nav.NavigateTo(r.Url))"
+                      Style="cursor:pointer; height:100%; border-left: 4px solid var(--mud-palette-primary);">
+                <MudStack Row AlignItems="AlignItems.Center" Spacing="3" Class="mb-2">
+                    <MudIcon Icon="@r.Icon" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h6">@r.Title</MudText>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@r.Description</MudText>
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private record ReportItem(string Title, string Description, string Url, string Icon);
+
+    private readonly List<ReportItem> _reports = new()
+    {
+        new("Equipment Inventory Report",
+            "Full list of active equipment with status, room, install date, and remaining lifespan.",
+            "/reports/inventory", Icons.Material.Filled.Devices),
+
+        new("Maintenance History Report",
+            "All maintenance records (open, in-progress, resolved, closed) with linked equipment.",
+            "/reports/maintenance", Icons.Material.Filled.Build),
+
+        new("Disposal Log Report",
+            "All disposal transactions and their lifecycle states (Pending → Approved → Disposed).",
+            "/reports/disposals", Icons.Material.Filled.DeleteSweep),
+
+        new("Expiring Equipment Report",
+            "Equipment that is expired or expiring within the next 6 months — recommended for replacement.",
+            "/reports/expiring", Icons.Material.Filled.EventBusy),
+
+        new("Equipment by Room Report",
+            "Inventory grouped by room with totals and breakdowns by status.",
+            "/reports/by-room", Icons.Material.Filled.MeetingRoom),
+
+        new("Fix Frequency Report",
+            "Equipment ranked by number of maintenance events. Identifies recurring problem units and supports replacement decisions for management.",
+            "/reports/fix-frequency", Icons.Material.Filled.Repeat),
+
+        new("Lifecycle Events Report",
+            "Chronological log of acquisitions and disposals over a selectable period. Use to brief management on portfolio additions and write-offs.",
+            "/reports/lifecycle-events", Icons.Material.Filled.SwapHoriz),
+    };
+}

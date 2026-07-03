@@ -1,0 +1,172 @@
+@page "/submit-ticket"
+@attribute [Authorize(Roles = "ITSpecialist,Student,Admin,Supervisor,AVStaff,Staff")]
+@inject TicketService TicketSvc
+@inject EquipmentService EquipmentSvc
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@using AVEquipmentManager.Shared.DTOs
+@using AVEquipmentManager.Shared.Enums
+
+<PageTitle>Submit Ticket - AVAMS</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4 mb-8">
+
+    <MudText Typo="Typo.h4" Class="mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.Send" Class="mr-2" /> Submit Maintenance Ticket
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        Use this form when the school's primary ticket system cannot resolve an
+        audio-visual equipment issue and the AV Department needs to take over.
+        You will be able to view the status of your submitted tickets afterwards
+        on the Maintenance Records page.
+    </MudText>
+
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid Spacing="2">
+
+                <MudItem xs="12">
+                    <MudAutocomplete T="EquipmentDto"
+                                     Label="Equipment (search by serial or name)"
+                                     @bind-Value="_selectedEquipment"
+                                     SearchFunc="SearchEquipment"
+                                     ToStringFunc="@(e => e == null ? "" : $"{e.SerialNumber} — {e.Name} ({e.RoomName})")"
+                                     ResetValueOnEmptyText="true"
+                                     CoerceText="true"
+                                     Required="true"
+                                     RequiredError="Pick the equipment this ticket is for"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_title" Label="Title (short summary)"
+                                  Required="true" RequiredError="Title is required"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  MaxLength="300" Counter="300" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="TicketPriority" Label="Priority" @bind-Value="_priority"
+                               Variant="Variant.Outlined" Margin="Margin.Dense">
+                        @foreach (var p in Enum.GetValues<TicketPriority>())
+                        {
+                            <MudSelectItem Value="@p">@p</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_externalTicketId"
+                                  Label="School Ticket ID (optional)"
+                                  HelperText="If you logged this in your school's ticket system first, paste the reference number here."
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  MaxLength="100" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_description" Label="Description"
+                                  Lines="5"
+                                  HelperText="What is the problem? What have you already tried?"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  MaxLength="2000" Counter="2000" />
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex justify-end gap-2 mt-2">
+                    <MudButton Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Send"
+                               OnClick="Submit" Disabled="@(!_isValid || _saving)">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                        }
+                        Submit Ticket
+                    </MudButton>
+                </MudItem>
+
+            </MudGrid>
+        </MudForm>
+    </MudPaper>
+
+</MudContainer>
+
+@code {
+    private MudForm _form = null!;
+    private bool _isValid;
+    private bool _saving;
+
+    private List<EquipmentDto> _allEquipment = new();
+    private EquipmentDto? _selectedEquipment;
+
+    private string _title = string.Empty;
+    private string _description = string.Empty;
+    private string _externalTicketId = string.Empty;
+    private TicketPriority _priority = TicketPriority.Medium;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _allEquipment = await EquipmentSvc.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not load equipment list: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Task<IEnumerable<EquipmentDto>> SearchEquipment(string value, CancellationToken _)
+    {
+        var q = _allEquipment.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            q = q.Where(e =>
+                e.SerialNumber.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                e.Name.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+                e.RoomName.Contains(value, StringComparison.OrdinalIgnoreCase));
+        }
+        return Task.FromResult(q.Take(25).AsEnumerable());
+    }
+
+    private void Cancel() => Nav.NavigateTo("/tickets");
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid || _selectedEquipment is null) return;
+
+        _saving = true;
+        try
+        {
+            var dto = new CreateTicketDto
+            {
+                Title            = _title,
+                Description      = string.IsNullOrWhiteSpace(_description) ? null : _description,
+                EquipmentId      = _selectedEquipment.Id,
+                Type             = TicketType.Maintenance,
+                Priority         = _priority,
+                ExternalTicketId = string.IsNullOrWhiteSpace(_externalTicketId) ? null : _externalTicketId,
+                // ReportedBy is overridden server-side for ITSpecialists,
+                // so we don't need to set it from the client.
+                ReportedBy       = null,
+                AssignedTo       = null
+            };
+
+            var (data, error) = await TicketSvc.CreateAsync(dto);
+            if (data is not null)
+            {
+                Snackbar.Add($"Ticket #{data.Id} submitted. The AV Department has been notified.", Severity.Success);
+                Nav.NavigateTo("/tickets");
+            }
+            else
+            {
+                Snackbar.Add($"Could not submit ticket: {error}", Severity.Error);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

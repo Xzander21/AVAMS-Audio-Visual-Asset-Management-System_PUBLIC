@@ -1,0 +1,109 @@
+@page "/reports/fix-frequency"
+@attribute [Authorize]
+@inject EquipmentService EquipmentSvc
+@inject TicketService TicketSvc
+@inject ISnackbar Snackbar
+
+<PageTitle>Fix Frequency Report - AVAMS</PageTitle>
+
+<ReportHeader Title="Fix Frequency Report"
+              Subtitle="Equipment ranked by total maintenance events. Use this report to justify replacement decisions to management — items at the top of the list are recurring problem units.">
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="4"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5">@_rows.Count(r => r.MaintCount > 0)</MudText>
+                <MudText Typo="Typo.caption">Items with maintenance history</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="4"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#F9A825;">@_rows.Count(r => r.MaintCount >= 3)</MudText>
+                <MudText Typo="Typo.caption">Recurring (≥ 3 events)</MudText>
+            </MudPaper></MudItem>
+            <MudItem xs="4"><MudPaper Class="pa-3 text-center" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h5" Style="color:#C62828;">@_rows.Count(r => r.MaintCount >= 5)</MudText>
+                <MudText Typo="Typo.caption">High-risk (≥ 5 events)</MudText>
+            </MudPaper></MudItem>
+        </MudGrid>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead>
+                <tr style="background:#E8F5E9; color:#1B5E20;">
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Rank</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Equipment</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Category</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Room</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:right;">Total Events</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:right;">Open / In-Progress</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Last Event</th>
+                    <th style="border:1px solid #ccc; padding:6px; text-align:left;">Recommendation</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int rank = 1; }
+                @foreach (var row in _rows.Where(r => r.MaintCount > 0))
+                {
+                    var bg = row.MaintCount >= 5 ? "#FFEBEE" : (row.MaintCount >= 3 ? "#FFF8E1" : "white");
+                    <tr style="background:@bg;">
+                        <td style="border:1px solid #ccc; padding:6px;">#@rank</td>
+                        <td style="border:1px solid #ccc; padding:6px;">
+                            <strong>@row.Eq.Name</strong><br />
+                            <small>SN @row.Eq.SerialNumber</small>
+                        </td>
+                        <td style="border:1px solid #ccc; padding:6px;">@row.Eq.Category</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@row.Eq.RoomName</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:right; font-weight:600;">@row.MaintCount</td>
+                        <td style="border:1px solid #ccc; padding:6px; text-align:right;">@row.OpenCount</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@(row.LastEvent?.ToString("yyyy-MM-dd") ?? "—")</td>
+                        <td style="border:1px solid #ccc; padding:6px;">@row.Recommendation</td>
+                    </tr>
+                    rank++;
+                }
+                @if (!_rows.Any(r => r.MaintCount > 0))
+                {
+                    <tr><td colspan="8" style="border:1px solid #ccc; padding:12px; text-align:center; color:#777;">
+                        No maintenance events recorded yet for any equipment.
+                    </td></tr>
+                }
+            </tbody>
+        </table>
+    }
+</ReportHeader>
+
+@code {
+    private List<Row> _rows = new();
+    private bool _loading = true;
+
+    private record Row(EquipmentDto Eq, int MaintCount, int OpenCount, DateTime? LastEvent, string Recommendation);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var eqs = await EquipmentSvc.GetAllAsync();
+            var tks = await TicketSvc.GetAllAsync();
+
+            _rows = eqs.Select(e =>
+            {
+                var t = tks.Where(x => x.EquipmentId == e.Id).ToList();
+                var open = t.Count(x => x.Status == TicketStatus.Open || x.Status == TicketStatus.InProgress);
+                var last = t.Any() ? t.Max(x => x.CreatedAt) : (DateTime?)null;
+                var rec = t.Count switch
+                {
+                    >= 5 => "Recommend replacement (high failure rate).",
+                    >= 3 => "Investigate root cause; consider replacement.",
+                    >= 1 => "Monitor.",
+                    _    => "—"
+                };
+                return new Row(e, t.Count, open, last, rec);
+            })
+            .OrderByDescending(r => r.MaintCount)
+            .ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+}

@@ -1,0 +1,170 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = "Admin")]
+@inject AdminService AdminSvc
+@inject ISnackbar Snackbar
+@inject IDialogService DialogSvc
+
+<PageTitle>User Management - AV Equipment Manager</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">User Management</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudGrid Spacing="2" AlignItems="Center">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_searchText" Label="Search users"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="string" Label="Filter by Role" @bind-Value="_filterRole" Clearable="true">
+                    <MudSelectItem Value="@("")">All Roles</MudSelectItem>
+                    <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
+                    <MudSelectItem Value="@("Supervisor")">Supervisor</MudSelectItem>
+                    <MudSelectItem Value="@("AVStaff")">AV Staff</MudSelectItem>
+                    <MudSelectItem Value="@("ITSpecialist")">IT Specialist</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="OpenAddUserDialog" FullWidth="true" Style="height:56px;">
+                    + ADD USER
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudTable Items="@FilteredUsers" Dense="true" Hover="true" Striped="true"
+              Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<UserDto, object>(x => x.Username)">Username</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<UserDto, object>(x => x.Email)">Email</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<UserDto, object>(x => x.Role)">Role</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<UserDto, object>(x => x.CreatedAt)">Created</MudTableSortLabel></MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Username">
+                <MudText Style="font-weight:500;">@context.Username</MudText>
+            </MudTd>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Role">
+                <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(context.Role)">
+                    @context.Role
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Created">
+                <MudText Typo="Typo.caption">
+                    @context.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudSelect T="string" Dense="true" Value="@context.Role"
+                           Style="min-width:140px;font-size:0.8rem;"
+                           ValueChanged="@((r) => ChangeRole(context.Id, context.Username, r))"
+                           Margin="Margin.Dense">
+                    <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
+                    <MudSelectItem Value="@("Supervisor")">Supervisor</MudSelectItem>
+                    <MudSelectItem Value="@("AVStaff")">AV Staff</MudSelectItem>
+                    <MudSelectItem Value="@("ITSpecialist")">IT Specialist</MudSelectItem>
+                </MudSelect>
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                               Color="Color.Error" OnClick="@(() => DeleteUser(context))"
+                               Title="Delete user" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Color="Color.Secondary" Class="pa-4">No users found.</MudText>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    private List<UserDto> _users = new();
+    private bool   _loading     = true;
+    private string _searchText  = "";
+    private string _filterRole  = "";
+
+    private IEnumerable<UserDto> FilteredUsers => _users.Where(u =>
+        (string.IsNullOrWhiteSpace(_searchText) ||
+         u.Username.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+         u.Email.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(_filterRole) || u.Role == _filterRole));
+
+    protected override async Task OnInitializedAsync() => await LoadUsersAsync();
+
+    private async Task LoadUsersAsync()
+    {
+        _loading = true;
+        try { _users = await AdminSvc.GetUsersAsync(); }
+        catch (Exception ex) { Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error); }
+        _loading = false;
+    }
+
+    private async Task ChangeRole(int userId, string username, string newRole)
+    {
+        var (success, error) = await AdminSvc.ChangeRoleAsync(userId, newRole);
+        if (success)
+        {
+            var user = _users.FirstOrDefault(u => u.Id == userId);
+            if (user != null) user.Role = newRole;
+            Snackbar.Add($"Role for '{username}' updated to {newRole}.", Severity.Success);
+            StateHasChanged();
+        }
+        else
+        {
+            Snackbar.Add($"Failed to update role: {error}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteUser(UserDto user)
+    {
+        bool? confirmed = await DialogSvc.ShowMessageBox(
+            "Confirm Delete",
+            $"Delete user '{user.Username}'? This action cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) return;
+
+        var (success, error) = await AdminSvc.DeleteUserAsync(user.Id);
+        if (success)
+        {
+            _users.Remove(user);
+            Snackbar.Add($"User '{user.Username}' deleted.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add($"Error: {error}", Severity.Error);
+        }
+    }
+
+    private async Task OpenAddUserDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog  = await DialogSvc.ShowAsync<AddUserDialog>("Add New User", options);
+        var result  = await dialog.Result;
+        if (!result!.Canceled) await LoadUsersAsync();
+    }
+
+    // Colour-codes role chips so the Admin can scan the user list at a glance.
+    // Includes legacy "Staff" / "Student" mappings so pre-pivot seed rows still
+    // display sensibly until they are upgraded via the inline role dropdown.
+    private static Color GetRoleColor(string role) => role switch
+    {
+        "Admin"        => Color.Warning,
+        "Supervisor"   => Color.Tertiary,
+        "AVStaff"      => Color.Info,
+        "Staff"        => Color.Info,        // legacy alias of AVStaff
+        "ITSpecialist" => Color.Success,
+        "Student"      => Color.Success,     // legacy alias of ITSpecialist
+        _              => Color.Default
+    };
+}

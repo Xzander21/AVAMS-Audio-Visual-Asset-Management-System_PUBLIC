@@ -1,0 +1,102 @@
+@inject AdminService AdminSvc
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Class="mr-2" />
+            Add New User
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_errorMessage</MudAlert>
+        }
+
+        <MudTextField @bind-Value="_username" Label="Username" Required="true"
+                      RequiredError="Username is required" Class="mb-3" />
+        <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email"
+                      Required="true" RequiredError="Email is required" Class="mb-3" />
+        <MudTextField @bind-Value="_password" Label="Password"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                      OnAdornmentClick="@(() => _showPassword = !_showPassword)"
+                      InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                      Required="true" RequiredError="Password is required (min 8 chars)"
+                      HelperText="Minimum 8 characters" Class="mb-3" />
+        <MudSelect T="string" Label="Role" @bind-Value="_role" Required="true"
+                   HelperText="@RoleDescription(_role)">
+            <MudSelectItem Value="@("AVStaff")">AV Staff (operational)</MudSelectItem>
+            <MudSelectItem Value="@("Supervisor")">Supervisor (approver only)</MudSelectItem>
+            <MudSelectItem Value="@("ITSpecialist")">IT Specialist (external ticket submitter)</MudSelectItem>
+            <MudSelectItem Value="@("Admin")">Admin (AV Head — full access)</MudSelectItem>
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_saving">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Submit" Disabled="@_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-1" /> }
+            Create User
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _username    = "";
+    private string _email       = "";
+    private string _password    = "";
+    // Default is AVStaff — the most common scenario the Admin will use this
+    // dialog for is onboarding a new operational hire. Supervisor / Admin
+    // accounts are rarely added and ITSpecialist accounts are created when a
+    // per-school IT contact is granted ticket-submission access.
+    private string _role        = "AVStaff";
+    private bool   _showPassword = false;
+    private bool   _saving      = false;
+    private string? _errorMessage;
+
+    private static string RoleDescription(string role) => role switch
+    {
+        "Admin"        => "Full access: equipment, staff, tickets, KPIs, archive, user management.",
+        "Supervisor"   => "Sole approval authority. Approves disposals, deploys acquisitions. Cannot author or modify records.",
+        "AVStaff"      => "Operational role. Equipment CRUD, ticket work, acquisitions/disposals proposals. Cannot approve or purge.",
+        "ITSpecialist" => "External submitter. Sees only Submit Ticket and own ticket list. No inventory access.",
+        _              => ""
+    };
+
+    private async Task Submit()
+    {
+        _errorMessage = null;
+        if (string.IsNullOrWhiteSpace(_username) ||
+            string.IsNullOrWhiteSpace(_email) ||
+            string.IsNullOrWhiteSpace(_password))
+        {
+            _errorMessage = "All fields are required.";
+            return;
+        }
+        if (_password.Length < 8)
+        {
+            _errorMessage = "Password must be at least 8 characters.";
+            return;
+        }
+
+        _saving = true;
+        var (success, error) = await AdminSvc.RegisterAsync(_username, _email, _password, _role);
+        _saving = false;
+
+        if (success)
+        {
+            Snackbar.Add($"User '{_username}' created successfully.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            _errorMessage = error ?? "Failed to create user.";
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
