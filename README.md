@@ -1,7 +1,7 @@
 # AVAMS — AV Equipment Management System
 
 A complete Audio-Visual asset management system built for the AV Department of an
-international school, with ITIL-aligned lifecycle workflows, transaction-proof
+institution, with ITIL-aligned lifecycle workflows, transaction-proof
 backend operations, and a four-role authorisation model.
 
 **Stack:** Blazor WebAssembly · MudBlazor · ASP.NET Core 8 Web API · EF Core 8 · SQLite
