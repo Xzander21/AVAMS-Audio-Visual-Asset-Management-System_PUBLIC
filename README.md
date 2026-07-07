@@ -254,11 +254,4 @@ commands needed on their end.
 
 ---
 
-## 📂 Related documents
 
-- `SECURITY.md` — what was patched in the Phase 3 audit and what's still open.
-- `TRANSACTION_PROOFING_BLUEPRINT.md` — the design document behind the ACID
-  transaction work.
-- `chapter3-artifacts/` — Chapter 3 paper artifacts (use case diagrams, DBML
-  schema, Mermaid activity & DFD diagrams, data dictionary).
-- `prototype/` — interactive click-through prototype (no backend required).
